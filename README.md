@@ -126,3 +126,111 @@ FFmpeg Configuration:
    - Memory-efficient chunking
    - Automatic error recovery
    - Client connection tracking
+
+## Why These Technical Choices Matter
+
+### Video Pipeline Decisions
+1. **H264 to MPEG1 Conversion**
+   - H264: Drone's native format, good compression but complex decoding
+   - MPEG1: Chosen for:
+     - Ultra-low latency (crucial for drone control)
+     - JavaScript-based decoding (works in all browsers)
+     - Simple decoding = less CPU usage
+     - Real-time performance over quality
+
+2. **Chunked Data Transfer (4KB)**
+   - Prevents memory spikes
+   - Smoother network transmission
+   - Better error recovery
+   - Reduces browser memory usage
+
+3. **FFmpeg Optimization**
+   - `ultrafast` preset: Minimizes encoding delay
+   - `zerolatency` tune: Removes buffering
+   - `640x480`: Best balance of quality vs performance
+   - `800k bitrate`: Enough quality without network congestion
+   - `3000k buffer`: Handles network jitter without adding delay
+
+4. **WebSocket Choice**
+   - Real-time bidirectional communication
+   - Lower overhead than HTTP
+   - Native browser support
+   - Automatic reconnection handling
+
+5. **UDP for Drone Communication**
+   - Faster than TCP for real-time video
+   - Packet loss acceptable for video
+   - Lower latency than TCP
+   - Standard protocol for drone control
+
+### Performance Decisions
+1. **Buffer Sizes**
+   - Video (256KB): Small enough for low latency
+   - FIFO (50MB): Large enough to handle network hiccups
+   - Chunk (4KB): Optimal for WebSocket frames
+
+2. **Hardware Acceleration**
+   - WebGL enabled: Uses GPU when available
+   - Reduces CPU load
+   - Smoother video playback
+   - Better battery life
+
+3. **Error Recovery**
+   - Exponential backoff: Prevents server flooding
+   - Automatic reconnection: Better user experience
+   - Process monitoring: Prevents resource leaks
+   - Chunk-based recovery: No need to restart stream
+
+These choices create a balance between:
+- Latency vs Quality
+- CPU Usage vs Features
+- Memory Usage vs Smoothness
+- Error Recovery vs Complexity
+
+## Understanding Video Buffering System
+
+### How Chunks and Buffer Work Together
+1. **Chunk System (4KB)**
+   - Video stream is split into 4KB chunks
+   - Server sends chunks immediately via WebSocket
+   - Each chunk is approximately one frame of video
+   - Continuous flow of chunks from server to client
+
+2. **Buffer System (256KB)**
+   - Browser maintains a 256KB rolling buffer
+   - Can hold approximately 64 chunks (256KB ÷ 4KB)
+   - Initial buffering phase:
+     ```
+     [Empty Buffer] → [Filling: 4KB, 8KB, ...] → [Full: 256KB]
+     ```
+   - Continuous operation:
+     ```
+     [New Chunks In] → [256KB Rolling Window] → [Old Chunks Out]
+     ```
+
+3. **Why This System?**
+   - **Chunks (4KB)**:
+     - Optimal network packet size
+     - Quick to process and send
+     - Matches WebSocket frame size
+     - Efficient memory usage
+   
+   - **Buffer (256KB)**:
+     - Smooths out network irregularities
+     - Handles brief connection issues
+     - Maintains fluid video playback
+     - Small enough for low latency
+     - Large enough for stability
+
+4. **Technical Details**
+   - Buffer size: 256 * 1024 bytes (262,144 bytes)
+   - Approximately 0.5 seconds of video
+   - Continuous rolling window operation
+   - Automatic buffer management by JSMpeg
+
+5. **Benefits**
+   - Low latency for drone control
+   - Smooth video playback
+   - Network jitter protection
+   - Efficient memory usage
+   - Quick recovery from brief interruptions
