@@ -281,3 +281,52 @@ These choices create a balance between:
    - Provides user feedback during recovery
    - Graceful handling of disconnections
    - Efficient resource management
+
+## Built-in Node.js Modules Used
+
+This project uses several built-in Node.js modules that don't require npm installation:
+
+1. **dgram**
+   - Purpose: UDP communication with Tello drone
+   - Built into Node.js core
+   - Usage: `import dgram from 'dgram';`
+
+2. **child_process**
+   - Purpose: Spawns FFmpeg process for video handling
+   - Built into Node.js core
+   - Usage: `import { spawn } from 'child_process';`
+   - How it works:
+     ```javascript
+     // spawn creates a new process in your system, similar to:
+     // - Double-clicking FFmpeg.exe in Windows
+     // - Running a program from command prompt
+     
+     // Example 1: Like double-clicking notepad
+     const notepad = spawn('notepad');
+     
+     // Example 2: Our FFmpeg usage
+     const ffmpeg = spawn('ffmpeg', [
+         '-i', 'input',
+         // options...
+     ]);
+     ```
+   - Important: The process runs outside Node.js in your actual system
+   - Requires the program (FFmpeg) to be installed on your system
+   - Must have proper system PATH configuration
+
+3. **path**
+   - Purpose: File path handling
+   - Built into Node.js core
+   - Usage: `import { dirname, join } from 'path';`
+
+4. **http**
+   - Purpose: HTTP server creation
+   - Built into Node.js core
+   - Usage: `import http from 'http';`
+
+5. **url**
+   - Purpose: URL handling utilities
+   - Built into Node.js core
+   - Usage: `import { fileURLToPath } from 'url';`
+
+Note: These modules are part of Node.js core functionality and do not need to be listed in package.json or installed via npm.
