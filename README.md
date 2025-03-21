@@ -330,3 +330,80 @@ This project uses several built-in Node.js modules that don't require npm instal
    - Usage: `import { fileURLToPath } from 'url';`
 
 Note: These modules are part of Node.js core functionality and do not need to be listed in package.json or installed via npm.
+
+# Browser Limitations vs Node.js Capabilities
+
+## Browser Sandbox Security
+Browsers operate in a strictly controlled sandbox environment for security reasons. This means:
+
+### What Browsers CANNOT Do:
+1. **UDP Communication**
+   - Cannot create direct UDP connections
+   - Cannot connect directly to Tello drone (port 8889)
+   - Cannot receive video stream directly (port 11111)
+
+2. **System Access**
+   - Cannot spawn system processes
+   - Cannot run FFmpeg or other executables
+   - Cannot access system resources directly
+   - Cannot modify system settings
+
+3. **Network Limitations**
+   - No direct port access
+   - No low-level networking
+   - Limited to HTTP(S) and WebSocket protocols
+
+### What Browsers CAN Do:
+1. **Web APIs**
+   - Make HTTP requests
+   - Create WebSocket connections
+   - Handle video streams (through proper protocols)
+   - Store data locally (localStorage)
+
+2. **Permitted Features** (with user permission)
+   - Access camera/microphone
+   - Use file system (limited)
+   - Store data
+   - Connect to known ports via WebSocket
+
+## Node.js Server Capabilities
+Node.js runs outside the browser sandbox, allowing:
+
+1. **System Integration**
+```javascript
+// Can spawn system processes
+import { spawn } from 'child_process';
+const ffmpeg = spawn('ffmpeg', [options]);
+
+// Can run any system command
+const notepad = spawn('notepad.exe');
+```
+
+2. **Network Access**
+```javascript
+// Can create UDP connections
+import dgram from 'dgram';
+const droneClient = dgram.createSocket('udp4');
+
+// Can listen on any port
+droneClient.bind(11111);
+```
+
+3. **Full System Access**
+   - Run external programs
+   - Access file system
+   - Modify system settings
+   - Handle raw network traffic
+
+## Why We Need Both
+Because of browser limitations, our architecture requires:
+
+1. **Node.js Server**
+   - Handles UDP communication with drone
+   - Runs FFmpeg for video processing
+   - Manages low-level networking
+
+2. **Browser Client**
+   - Provides user interface
+   - Connects to local server via safe protocols
+   - Displays processed video stream
