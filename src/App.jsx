@@ -78,6 +78,8 @@ function App() {
                 reconnectAttemptsRef.current++;
                 const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 10000);
                 reconnectTimeoutRef.current = setTimeout(() => {
+                  // This function lives independently
+                  // even if the player instance is destroyed
                   console.log(`Reconnect attempt ${reconnectAttemptsRef.current}`);
                   if (playerRef.current) {
                     playerRef.current.destroy();
@@ -92,20 +94,20 @@ function App() {
           }
         );
 
-        // Store player instance for controls
+        // Extract actual player instance from VideoElement wrapper
         playerRef.current = playerRef.current.player;
 
         // Monitor video performance
         if (playerRef.current) {
           setInterval(() => {
-            const stats = playerRef.current.getVideoStats();
+            const stats = playerRef.current.getVideoStats(); // Get video performance stats
             console.log('Video Stats:', {
-              fps: stats.fps.toFixed(1),
-              decodedFrames: stats.decodedFrames,
-              droppedFrames: stats.droppedFrames,
-              bufferSize: (stats.bufferSize / 1024).toFixed(1) + 'KB'
+              fps: stats.fps.toFixed(1), // FPS (frames per second)
+              decodedFrames: stats.decodedFrames, // Number of frames decoded
+              droppedFrames: stats.droppedFrames, // Number of frames dropped
+              bufferSize: (stats.bufferSize / 1024).toFixed(1) + 'KB' // Buffer size in KB
             });
-          }, 5000);
+          }, 5000); // Update stats every 5 seconds
         }
       } catch (err) {
         console.error('Player initialization error:', err);
@@ -114,10 +116,11 @@ function App() {
     }
   };
 
-  // Initialize player on mount and cleanup on unmount
+  // ==== LIFE CYCLE MANAGEMENT ====
   useEffect(() => {
     initializePlayer();
     return () => {
+      // you have to clear the timeout even if you destroy the player instance cause timeout function id stored in browser memory otherwise it will keep running
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
@@ -126,7 +129,7 @@ function App() {
         playerRef.current = null;
       }
     };
-  }, []);
+  }, []); // Empty array means this will only run once on mount and unmount and not on re-render
 
   /**
    * Sends commands to the drone via HTTP API
