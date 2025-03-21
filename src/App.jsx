@@ -58,19 +58,19 @@ function App() {
             // Event handlers for stream management
             onSourceEstablished: () => {
               console.log('Stream source established');
-              reconnectAttemptsRef.current = 0;
-              setConnected(true);
-              setError(null);
+              reconnectAttemptsRef.current = 0; // Reset reconnection counter
+              setConnected(true); // Update connection status
+              setError(null); // Clear any previous errors
             },
             onSourceCompleted: () => {
-              console.log('Stream completed');
+              console.log('Stream completed'); // Log when stream is completed like when the drone stops streaming
             },
             onStalled: () => {
-              console.log('Stream stalled');
+              console.log('Stream stalled'); // Log when stream is stalled like for temporary network issues but connection is still exist
               setError('Video stream stalled - attempting to reconnect...');
             },
             onEnded: () => {
-              console.log('Stream ended');
+              console.log('Stream ended'); //log when connection is lost or terminated
               setConnected(false);
               
               // Implement exponential backoff reconnection

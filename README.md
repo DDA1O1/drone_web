@@ -234,3 +234,50 @@ These choices create a balance between:
    - Network jitter protection
    - Efficient memory usage
    - Quick recovery from brief interruptions
+
+## Stream Recovery System
+
+### Event Handling & Recovery
+1. **Stream Events**
+   - **onStalled**:
+     - Triggers when stream temporarily freezes
+     - Buffer runs empty but connection exists
+     - Common in temporary signal weakness
+     - Example: Drone flying behind obstacle
+     - No exponential backoff needed
+     - Recovers automatically when signal improves
+
+   - **onEnded**:
+     - Triggers when connection is fully lost
+     - Complete disconnection from stream
+     - Example: Drone power off or out of range
+     - Initiates exponential backoff recovery
+     - Requires full reconnection process
+
+2. **Exponential Backoff System**
+   - Activates after complete connection loss
+   - Progressive retry delays:
+     ```javascript
+     Attempt 1: 2 seconds  (2¹ * 1000ms)
+     Attempt 2: 4 seconds  (2² * 1000ms)
+     Attempt 3: 8 seconds  (2³ * 1000ms)
+     Attempt 4: 10 seconds (capped)
+     Attempt 5: 10 seconds (capped)
+     ```
+   - Maximum 5 retry attempts
+   - Maximum delay capped at 10 seconds
+   - Formula: `Math.min(1000 * Math.pow(2, attemptNumber), 10000)`
+
+3. **Recovery Process**
+   - Clean up existing player instance
+   - Wait for calculated delay
+   - Attempt new connection
+   - Monitor success/failure
+   - Repeat if necessary (up to max attempts)
+
+4. **Benefits**
+   - Prevents server overwhelming
+   - Allows network issues to resolve
+   - Provides user feedback during recovery
+   - Graceful handling of disconnections
+   - Efficient resource management
