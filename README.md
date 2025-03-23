@@ -3,7 +3,7 @@
 ## Core Components
 
 1. **Server Components**
-   - HTTP Server (Port 3000): Serves static web content and handles drone commands
+   - Express Server (Port 3000): Serves static web content and handles drone commands
    - WebSocket Server (Port 3001): Broadcasts video stream data to clients
    - FFmpeg Process: Handles video transcoding
 
@@ -407,3 +407,347 @@ Because of browser limitations, our architecture requires:
    - Provides user interface
    - Connects to local server via safe protocols
    - Displays processed video stream
+
+## Understanding Server Architecture
+
+### Independent Server Architecture
+
+1. **Express Server (Port 3000)**
+   - Handles HTTP endpoints for drone commands
+   - Serves static files
+   - Completely independent from WebSocket server
+   ```javascript
+   const app = express();
+   app.listen(3000);
+   ```
+
+2. **WebSocket Server (Port 3001)**
+   - Dedicated server for video streaming
+   - Runs independently on its own port
+   - No HTTP server dependency
+   ```javascript
+   const wss = new WebSocketServer({ port: 3001 });
+   ```
+
+3. **Benefits of Independent Servers:**
+   - Clear separation of concerns
+   - Simplified architecture
+   - Independent scaling if needed
+   - Easier maintenance
+   - Better error isolation
+
+4. **Communication Flow:**
+   ```
+   Express Server (3000)     WebSocket Server (3001)
+   │                         │
+   ├─ Drone Commands         ├─ Video Streaming
+   ├─ Static Files          │
+   └─ API Endpoints         └─ Client Connections
+   ```
+
+### Key Takeaway
+Our application uses independent Express and WebSocket servers, each handling its specific responsibilities. Express manages HTTP endpoints and static files, while WebSocket handles video streaming. This separation provides a clean, maintainable architecture while maintaining all functionality.
+
+## Understanding Process Communication
+
+### 1. Spawn and System Processes
+```javascript
+const ffmpeg = spawn('ffmpeg', [...options]);
+```
+- Creates a completely new process in the operating system
+- Runs independently from Node.js process
+- Visible in Task Manager/Activity Monitor
+- Similar to manually running FFmpeg in terminal
+- Node.js can control this separate process
+
+### 2. Network Interfaces (0.0.0.0)
+```javascript
+'-i', `udp://0.0.0.0:${TELLO_VIDEO_PORT}`
+```
+Your computer has multiple network interfaces:
+- WiFi (e.g., 192.168.1.5)
+- Ethernet (e.g., 192.168.1.10)
+- Localhost (127.0.0.1)
+
+When we use `0.0.0.0`:
+- Listens for incoming data on ALL interfaces
+- Captures drone video regardless of network connection type
+- Like having security cameras at every entrance
+- Ensures we don't miss the video feed
+
+### 3. Process Communication through Pipes
+```
+FFmpeg Process                     Node.js Process
+[Video Processing] ==== PIPE ====> [Data Receiver]
+```
+
+How pipes work:
+1. FFmpeg processes video and writes to pipe:
+   ```javascript
+   'pipe:1'  // FFmpeg's output goes to pipe
+   ```
+
+2. Node.js reads from pipe:
+   ```javascript
+   ffmpeg.stdout.on('data', (data) => {
+       // Receive data from FFmpeg through pipe
+   });
+   ```
+
+Think of it like a water pipe:
+- Room 1 (FFmpeg): Processes video and puts it in pipe
+- Pipe: Connects the two processes
+- Room 2 (Node.js): Takes video from pipe and sends to browsers
+
+Complete data flow:
+```
+Drone --UDP--> FFmpeg --PIPE--> Node.js --WebSocket--> Browser
+```
+
+Each connection type serves a specific purpose:
+- UDP: Raw video from drone
+- Pipe: Inter-process communication
+- WebSocket: Browser streaming
+
+## Understanding FFmpeg Output Options
+
+### FFmpeg Output Configuration
+```javascript
+const ffmpeg = spawn('ffmpeg', [
+    // ... input and processing options ...
+    'pipe:1'  // Critical: Send output to Node.js
+]);
+```
+
+1. **Why `pipe:1` is Critical**:
+   - Without `pipe:1`, FFmpeg would:
+     - Try to save to a file
+     - Or expect an output filename
+     - Not send data back to Node.js
+   - With `pipe:1`:
+     - Sends processed video directly to Node.js
+     - Enables real-time streaming
+     - No temporary files needed
+
+2. **Alternative Output Options**:
+   ```javascript
+   // Save to file (no streaming)
+   ffmpeg [...] output.mp4
+
+   // Output to pipe (our streaming setup)
+   ffmpeg [...] pipe:1
+
+   // No output specified (would error)
+   ffmpeg [...] 
+   ```
+
+3. **Why We Use Pipe**:
+   - Real-time streaming to browser
+   - No disk space used
+   - Lower latency
+   - Direct communication with Node.js
+
+Without `pipe:1`, the video stream would break because:
+- FFmpeg wouldn't know where to send processed video
+- Node.js wouldn't receive any video data
+- WebSocket clients would get no stream
+
+## Understanding WebSocket Connection States
+
+### WebSocket Client States
+```javascript
+// In our video streaming code
+if (client.readyState === 1) {
+    client.send(chunk, { binary: true });
+}
+```
+
+1. **Connection States**:
+   - `0` (CONNECTING):
+     - Initial state
+     - Socket has been created
+     - Connection is not yet established
+   
+   - `1` (OPEN):
+     - Connection is established and ready
+     - Data can be sent and received
+     - This is when we send video chunks
+   
+   - `2` (CLOSING):
+     - Connection is in the process of closing
+     - Clean-up operations are happening
+     - No new data should be sent
+   
+   - `3` (CLOSED):
+     - Connection is closed or couldn't be opened
+     - No communication possible
+     - Client is removed from active set
+
+2. **Why States Matter**:
+   - Prevents sending data to disconnected clients
+   - Ensures clean connection handling
+   - Helps manage system resources
+   - Improves error handling
+
+3. **State Management in Our Code**:
+   ```javascript
+   // Adding new client
+   wss.on('connection', (ws) => {
+       clients.add(ws);  // State is OPEN
+   });
+
+   // Removing disconnected client
+   ws.on('close', () => {
+       clients.delete(ws);  // State is CLOSED
+   });
+
+   // Checking before sending
+   if (client.readyState === 1) {
+       // Only send if connection is OPEN
+   }
+   ```
+
+4. **Benefits of State Checking**:
+   - Prevents memory leaks
+   - Reduces error messages
+   - Ensures reliable streaming
+   - Improves performance
+
+## Understanding JSMpeg and MPEGTS
+
+### JSMpeg's Internal Architecture
+1. **Buffer Management**
+   - Small internal buffers (512KB video, 128KB audio)
+   - Discards old data to maintain low latency
+   - Immediate decoding of received data
+   - No timestamp-based synchronization
+
+2. **Streaming Behavior**
+   ```javascript
+   // JSMpeg prioritizes low latency:
+   - Decodes data immediately upon receipt
+   - Ignores video/audio timestamps
+   - Maintains minimal buffering
+   - Auto-discards old frames
+   ```
+
+3. **Memory Management**
+   - Automatic buffer cleanup
+   - Discards unplayed old data for new data
+   - Prevents memory growth
+   - Maintains consistent performance
+
+### MPEGTS (MPEG Transport Stream)
+1. **Packet Structure**
+   ```
+   [Packet 1: 188 bytes][Packet 2: 188 bytes]...[Packet N: 188 bytes]
+   ```
+   - Each packet exactly 188 bytes
+   - Fixed-size structure for reliability
+   - Independent packet processing
+   - Built for error resilience
+
+2. **Why MPEGTS Works Well**:
+   - **Fixed Packet Size**:
+     - 188-byte packets are standard
+     - Our 4KB chunks contain ~21.78 packets
+     - Partial packets handled gracefully
+     - Perfect for streaming
+
+   - **Error Resilience**:
+     - Each packet has sync byte (0x47)
+     - Packets can be processed independently
+     - Missing packets don't break stream
+     - Built for unreliable networks
+
+3. **Chunking and MPEGTS**
+   ```javascript
+   // Our 4KB chunks naturally align with MPEGTS:
+   4096 bytes ÷ 188 bytes = 21.78 packets
+   ```
+   - Complete packets: 21
+   - Remaining bytes: 146
+   - Next chunk starts with remainder
+   - No data loss between chunks
+
+4. **JSMpeg's MPEGTS Handling**
+   - Reconstructs partial packets
+   - Uses sync bytes for alignment
+   - Handles network jitter
+   - Maintains smooth playback
+
+5. **Benefits of This Architecture**
+   - Ultra-low latency streaming
+   - Robust error handling
+   - Efficient memory usage
+   - Smooth video playback
+   - Network resilience
+
+## FFmpeg Process Management
+
+### Global Variable vs Return Value Approach
+
+1. **Why We Use a Global Variable**
+   ```javascript
+   // Global variable approach (current implementation)
+   let ffmpegProcess = null;  // Single source of truth
+
+   function startFFmpeg() {
+       // Kill existing process if any
+       if (ffmpegProcess) {
+           ffmpegProcess.kill();
+       }
+
+       const ffmpeg = spawn('ffmpeg', [...]);
+       ffmpegProcess = ffmpeg;  // Update global reference
+   }
+   ```
+
+2. **Benefits of Global Variable**
+   - Single source of truth for FFmpeg process state
+   - Multiple restart points can access and modify:
+     ```javascript
+     // Error handler can restart
+     ffmpeg.on('error', () => {
+         setTimeout(startFFmpeg, 1000);
+     });
+
+     // Exit handler can restart
+     ffmpeg.on('exit', () => {
+         ffmpegProcess = null;
+         setTimeout(startFFmpeg, 1000);
+     });
+
+     // SIGINT handler can kill
+     process.on('SIGINT', () => {
+         if (ffmpegProcess) {
+             ffmpegProcess.kill();
+         }
+     });
+     ```
+   - Process state can be checked from anywhere
+   - Simplifies auto-restart functionality
+   - Cleaner state management across different event handlers
+
+3. **Why Not Use Return Value**
+   ```javascript
+   // Return value approach (would be problematic)
+   function startFFmpeg() {
+       const ffmpeg = spawn('ffmpeg', [...]);
+       return ffmpeg;
+   }
+
+   // Would need complex state management:
+   let currentProcess = startFFmpeg();
+   // How to update reference when process restarts?
+   // How to access from different event handlers?
+   ```
+
+4. **State Management Benefits**
+   - Clear process lifecycle tracking
+   - Easy to kill old process before starting new one
+   - Simplified error recovery
+   - Centralized process control
+   - Automatic cleanup on server shutdown
+
+The global variable approach provides cleaner state management and better handles the complex lifecycle of the FFmpeg process, including automatic restarts and cleanup.
