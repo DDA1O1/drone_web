@@ -751,3 +751,67 @@ if (client.readyState === 1) {
    - Automatic cleanup on server shutdown
 
 The global variable approach provides cleaner state management and better handles the complex lifecycle of the FFmpeg process, including automatic restarts and cleanup.
+
+## Understanding Buffer Sizes in Video Pipeline
+
+### Three-Stage Buffering System
+```
+Drone → [FFmpeg UDP Buffer] → FFmpeg → [WebSocket Buffer] → Browser → [JSMpeg Buffer] → Display
+```
+
+1. **FFmpeg Network Buffer (50MB)**
+   ```javascript
+   fifo_size=50000000  // 50MB UDP buffer
+   ```
+   - Large buffer for incoming UDP video packets
+   - Handles network jitter and packet timing variations
+   - Prevents packet loss during network fluctuations
+   - `overrun_nonfatal=1`: Continues if buffer fills up
+   - Acts as initial "shock absorber" for UDP stream
+
+2. **WebSocket Chunking Buffer**
+   ```javascript
+   const MPEGTS_PACKET_SIZE = 188;    // Each MPEG-TS packet
+   const PACKETS_PER_CHUNK = 21;      // Number of packets per chunk
+   const CHUNK_SIZE = 3948;           // 188 * 21 bytes
+   ```
+   - Accumulates FFmpeg output into optimal chunks
+   - Aligns with MPEG-TS packet boundaries
+   - Ensures efficient WebSocket transmission
+   - Prevents packet fragmentation
+   - Maintains data integrity
+
+3. **JSMpeg Player Buffer (256KB)**
+   ```javascript
+   videoBufferSize: 256 * 1024  // 256KB video buffer
+   ```
+   - Small buffer for low-latency playback
+   - Can hold ~66 chunks (256KB ÷ 3.948KB)
+   - Drops old frames when full
+   - Limited by JSMpeg's internal cap (512KB)
+   - Balances smoothness vs latency
+
+### Why Three Buffers?
+
+1. **FFmpeg's 50MB Buffer**
+   - Handles bursty UDP traffic
+   - Compensates for network irregularities
+   - Prevents video data loss
+   - Gives FFmpeg stable input stream
+
+2. **WebSocket's Chunk Buffer**
+   - Optimizes network transmission
+   - Respects MPEG-TS packet boundaries
+   - Efficient data packaging
+   - Reduces WebSocket overhead
+
+3. **JSMpeg's 256KB Buffer**
+   - Maintains low display latency
+   - Smooth playback during jitter
+   - Memory-efficient browser-side
+   - Real-time drone feedback
+
+This multi-stage buffering system creates a balance between:
+- Network reliability (50MB UDP buffer)
+- Transmission efficiency (3.948KB chunks)
+- Display latency (256KB playback buffer)

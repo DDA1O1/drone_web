@@ -50,7 +50,7 @@ function App() {
             // Makes video decoding faster using GPU
             progressive: true,              // Load and play frames as they arrive
             // Don't wait for full buffer
-            chunkSize: 4096,               // 4KB chunks matching server
+            chunkSize: 3948,               // Matches server's MPEGTS_PACKET_SIZE * PACKETS_PER_CHUNK (188 * 21)
             decodeFirstFrame: true,         // Fast initial display
             preserveDrawingBuffer: false,   // Don't keep old frames in memory
             throttled: false,               // Real-time streaming
@@ -120,7 +120,7 @@ function App() {
   useEffect(() => {
     initializePlayer();
     return () => {
-      // you have to clear the timeout even if you destroy the player instance cause timeout function id stored in browser memory otherwise it will keep running
+      // you have to clear the timeout even if you destroy the player instance cause timeout function is stored in browser memory otherwise it will keep running
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
