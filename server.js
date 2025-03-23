@@ -193,6 +193,6 @@ app.use(express.static(join(__dirname, 'dist')));
 app.listen(port, () => {
     console.log(`Express server running on http://localhost:${port}`);
     console.log(`WebSocket server running on ws://localhost:${streamPort}`);
-    initDrone();
-    setTimeout(startFFmpeg, 2000); 
+    initDrone(); // Initialize drone connection with initial command and streamon
+    setTimeout(startFFmpeg, 2000); // Start FFmpeg after 2 seconds
 }); 
