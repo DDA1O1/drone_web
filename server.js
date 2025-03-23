@@ -99,10 +99,9 @@ function startFFmpeg() {
 
         // Video codec settings
         '-c:v', 'mpeg1video', // Use MPEG1 video codec (works well with JSMpeg)
-        '-b:v', '800k', // Video bitrate: 800 kilobits/second
-        '-maxrate', '800k', // Maximum bitrate allowed
-        '-bufsize', '3000k', // Buffer size for rate control
-
+        '-b:v', '1000k',     // Video bitrate: 1 Mbps (better for 640x480@30fps)
+        '-maxrate', '1500k', // Allow 50% higher bitrate for peaks
+        '-bufsize', '4000k', // 4x target bitrate for stable encoding
 
         '-an', // Remove audio (drone has no audio)
 

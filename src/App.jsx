@@ -14,7 +14,8 @@ function App() {
   const playerRef = useRef(null);     // Reference to JSMpeg player instance
   
   // State management
-  const [connected, setConnected] = useState(false);  // WebSocket connection status
+  const [videoConnected, setVideoConnected] = useState(false);  // Video stream status
+  const [droneConnected, setDroneConnected] = useState(false);  // Drone connection status
   const [error, setError] = useState(null);          // Error message state
   
   // Reconnection handling
@@ -58,9 +59,9 @@ function App() {
             // Event handlers for stream management
             onSourceEstablished: () => {
               console.log('Stream source established');
-              reconnectAttemptsRef.current = 0; // Reset reconnection counter
-              setConnected(true); // Update connection status
-              setError(null); // Clear any previous errors
+              reconnectAttemptsRef.current = 0;
+              setVideoConnected(true);
+              setError(null);
             },
             onSourceCompleted: () => {
               console.log('Stream completed'); // Log when stream is completed like when the drone stops streaming
@@ -71,7 +72,7 @@ function App() {
             },
             onEnded: () => {
               console.log('Stream ended'); //log when connection is lost or terminated
-              setConnected(false);
+              setVideoConnected(false);
               
               // Implement exponential backoff reconnection
               if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
@@ -131,6 +132,24 @@ function App() {
     };
   }, []); // Empty array means this will only run once on mount and unmount and not on re-render
 
+  // Add event listener for drone connection
+  useEffect(() => {
+    const checkDroneStatus = async () => {
+      try {
+        const response = await fetch('/drone/command');
+        setDroneConnected(response.ok);
+      } catch (error) {
+        setDroneConnected(false);
+      }
+    };
+    
+    // Check initially and every 5 seconds
+    checkDroneStatus();
+    const interval = setInterval(checkDroneStatus, 5000);
+    
+    return () => clearInterval(interval);
+  }, []);
+
   /**
    * Sends commands to the drone via HTTP API
    * @param {string} command - The command to send to the drone
@@ -153,9 +172,14 @@ function App() {
     <div className="container">
       <h1>Tello Drone Control</h1>
       
-      {/* Connection status indicator */}
-      <div className={`status ${connected ? 'connected' : 'disconnected'}`}>
-        Status: {connected ? 'Connected' : 'Disconnected'}
+      {/* Connection status indicators */}
+      <div className="status-container">
+        <div className={`status ${droneConnected ? 'connected' : 'disconnected'}`}>
+          Drone: {droneConnected ? 'Connected' : 'Disconnected'}
+        </div>
+        <div className={`status ${videoConnected ? 'connected' : 'disconnected'}`}>
+          Video: {videoConnected ? 'Connected' : 'Disconnected'}
+        </div>
         {error && <div className="error">{error}</div>}
       </div>
       
