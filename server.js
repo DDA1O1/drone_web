@@ -68,15 +68,44 @@ wss.on('connection', (ws) => {
 app.get('/drone/:command', (req, res) => {
     // Extract the command from the request parameters
     const command = req.params.command;
-    // Send the command to the drone via UDP
-    droneClient.send(command, 0, command.length, TELLO_PORT, TELLO_IP, (err) => {
-        if (err) {
-            console.error('Error sending command:', err);
-            res.status(500).send('Error sending command');
-        } else {
-            res.send('Command sent');
+    
+    // Handle streamon command specially
+    if (command === 'streamon') {
+        droneClient.send(command, 0, command.length, TELLO_PORT, TELLO_IP, (err) => {
+            if (err) {
+                console.error('Error sending command:', err);
+                res.status(500).send('Error sending command');
+            } else {
+                // Start FFmpeg after streamon command succeeds
+                startFFmpeg();
+                res.send('Command sent');
+            }
+        });
+    } else if (command === 'streamoff') {
+        // Kill FFmpeg process when streaming is turned off
+        if (ffmpegProcess) {
+            ffmpegProcess.kill();
+            ffmpegProcess = null;
         }
-    });
+        droneClient.send(command, 0, command.length, TELLO_PORT, TELLO_IP, (err) => {
+            if (err) {
+                console.error('Error sending command:', err);
+                res.status(500).send('Error sending command');
+            } else {
+                res.send('Command sent');
+            }
+        });
+    } else {
+        // Send other commands normally
+        droneClient.send(command, 0, command.length, TELLO_PORT, TELLO_IP, (err) => {
+            if (err) {
+                console.error('Error sending command:', err);
+                res.status(500).send('Error sending command');
+            } else {
+                res.send('Command sent');
+            }
+        });
+    }
 });
 
 // Define POST endpoint that handles photo saving
@@ -149,17 +178,6 @@ app.post('/stop-recording', (req, res) => {
         res.status(400).send('No active recording');
     }
 });
-
-// Initialize drone connection
-function initDrone() {
-    droneClient.send('command', 0, 'command'.length, TELLO_PORT, TELLO_IP, (err) => {
-        if (err) console.error('Error sending command:', err);
-        else {
-            console.log('Drone initialized');
-            droneClient.send('streamon', 0, 'streamon'.length, TELLO_PORT, TELLO_IP);
-        }
-    });
-}
 
 // Handle drone responses
 droneClient.on('message', (msg) => {
@@ -300,6 +318,4 @@ app.use(express.static(join(__dirname, 'dist')));
 app.listen(port, () => {
     console.log(`Express server running on http://localhost:${port}`);
     console.log(`WebSocket server running on ws://localhost:${streamPort}`);
-    initDrone(); // Initialize drone connection with initial command and streamon
-    setTimeout(startFFmpeg, 2000); // Start FFmpeg after 2 seconds
 }); 
