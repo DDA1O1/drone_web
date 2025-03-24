@@ -48,59 +48,72 @@ const droneClient = dgram.createSocket('udp4');
 // Create WebSocket server for video streaming
 const wss = new WebSocketServer({ port: streamPort });
 const clients = new Set(); // Set only stores unique values
+let nextClientId = 0;  // Add client ID counter
 
 // Handle WebSocket connections
 wss.on('connection', (ws) => {
-    console.log('Client connected to video stream');
+    // Assign unique ID to each client
+    ws.clientId = nextClientId++;
     clients.add(ws);
-    console.log(clients);
-    console.log(`Total connected clients: ${clients.size}`);
+    console.log(`Client ${ws.clientId} connected. Total clients: ${clients.size}`);
     
     ws.on('error', console.error);
     ws.on('close', () => {
-        console.log('Client disconnected from video stream');
         clients.delete(ws);
-        console.log(`Remaining connected clients: ${clients.size}`);
+        console.log(`Client ${ws.clientId} disconnected. Total clients: ${clients.size}`);
+        
+        // Only stop video if this was the last client
+        if (clients.size === 0) {
+            if (ffmpegProcess) {
+                ffmpegProcess.kill();
+                ffmpegProcess = null;
+            }
+            // Send streamoff to drone only when last viewer disconnects
+            droneClient.send('streamoff', 0, 'streamoff'.length, TELLO_PORT, TELLO_IP);
+        }
     });
 });
 
 // Add route for drone commands
 app.get('/drone/:command', (req, res) => {
-    // Extract the command from the request parameters
     const command = req.params.command;
     
-    // Handle streamon command specially
     if (command === 'streamon') {
         droneClient.send(command, 0, command.length, TELLO_PORT, TELLO_IP, (err) => {
             if (err) {
                 console.error('Error sending command:', err);
                 res.status(500).send('Error sending command');
             } else {
-                // Start FFmpeg after streamon command succeeds
                 startFFmpeg();
                 res.send('Command sent');
             }
         });
     } else if (command === 'streamoff') {
-        if (ffmpegProcess) {
-            ffmpegProcess.kill();
-            ffmpegProcess = null;
+        // Find the requesting client and only close that one
+        const requestingClient = Array.from(clients).find(client => 
+            client.readyState === 1
+        );
+        if (requestingClient) {
+            requestingClient.close();
         }
-        // Clear any remaining clients
-        clients.forEach(client => {
-            if (client.readyState === 1) {
-                client.close();
+        
+        // Only kill FFmpeg and send streamoff if no clients left
+        if (clients.size === 0) {
+            if (ffmpegProcess) {
+                ffmpegProcess.kill();
+                ffmpegProcess = null;
             }
-        });
-        clients.clear();
-        droneClient.send(command, 0, command.length, TELLO_PORT, TELLO_IP, (err) => {
-            if (err) {
-                console.error('Error sending command:', err);
-                res.status(500).send('Error sending command');
-            } else {
-                res.send('Command sent');
-            }
-        });
+            droneClient.send(command, 0, command.length, TELLO_PORT, TELLO_IP, (err) => {
+                if (err) {
+                    console.error('Error sending command:', err);
+                    res.status(500).send('Error sending command');
+                } else {
+                    res.send('Command sent');
+                }
+            });
+        } else {
+            res.send('Client disconnected but stream continues for other viewers');
+        }
     } else {
         // Send other commands normally
         droneClient.send(command, 0, command.length, TELLO_PORT, TELLO_IP, (err) => {
