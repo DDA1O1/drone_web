@@ -837,3 +837,64 @@ npm install
 ```
 
 ⚠️ **Note:** For production use, we recommend using the stable version (v1.0.0). The latest version may contain experimental features and bugs.
+
+## WebSocket Connection Management
+
+### Client Connection Architecture
+```javascript
+const clients = new Set();  // Stores active client connections
+let nextClientId = 0;      // Unique ID counter for clients
+```
+
+### Connection Lifecycle
+1. **New Connection**
+   ```javascript
+   wss.on('connection', (ws) => {
+       ws.clientId = nextClientId++;  // Assign unique ID
+       clients.add(ws);               // Add to active clients
+   });
+   ```
+
+2. **Connection Closure**
+   - Automatic cleanup when client disconnects
+   - Resource management for video streaming
+   - FFmpeg process management
+   ```javascript
+   ws.on('close', () => {
+       clients.delete(ws);  // Remove from active set
+       
+       // Stop video if last client
+       if (clients.size === 0) {
+           // Kill FFmpeg process
+           // Send streamoff to drone
+       }
+   });
+   ```
+
+3. **Benefits of Set-based Management**
+   - O(1) client addition/removal
+   - No duplicate connections
+   - Easy active client tracking
+   - Efficient memory usage
+   - Simple iteration for broadcasts
+
+4. **Resource Cleanup**
+   - Automatic FFmpeg process termination
+   - Drone command state management
+   - Memory leak prevention
+   - Clean process shutdown
+   - Proper resource deallocation
+
+5. **Error Handling**
+   - Connection error logging
+   - Automatic client removal
+   - Process recovery
+   - Stream state management
+   - Resource cleanup on errors
+
+This architecture ensures:
+- Reliable client tracking
+- Efficient resource usage
+- Clean connection closure
+- Proper stream management
+- Scalable client handling

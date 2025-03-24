@@ -184,15 +184,31 @@ app.post('/start-recording', (req, res) => {
 
 app.post('/stop-recording', (req, res) => {
     if (recordingStream || mp4Process) {
-        if (recordingStream) {
-            recordingStream.end();
-            recordingStream = null;
+        try {
+            if (recordingStream) {
+                recordingStream.end();
+                // Wait for 'finish' event to ensure proper closure
+                recordingStream.on('finish', () => {
+                    recordingStream = null;
+                });
+                recordingStream.on('error', (err) => {
+                    console.error('Error closing recording stream:', err);
+                });
+            }
+            
+            if (mp4Process && mp4Process.stdin.writable) {
+                mp4Process.stdin.end();
+                mp4Process.on('close', (code) => {
+                    console.log(`MP4 process closed with code ${code}`);
+                    mp4Process = null;
+                });
+            }
+            
+            res.send('Recording stopped');
+        } catch (err) {
+            console.error('Error stopping recording:', err);
+            res.status(500).send('Error stopping recording');
         }
-        if (mp4Process) {
-            mp4Process.stdin.end(); // close the input stream
-            mp4Process = null; // clear the reference
-        }
-        res.send('Recording stopped');
     } else {
         res.status(400).send('No active recording');
     }
