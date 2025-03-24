@@ -409,15 +409,58 @@ function startFFmpeg() {
     return ffmpeg; // Return the FFmpeg instance
 }
 
-// Cleanup on process exit
-process.on('SIGINT', () => { // Handle Ctrl+C (SIGINT) to stop the server
-    if (ffmpegProcess) { // can access ffmpegProcess because it's a global variable
+// Add this improved graceful shutdown handler
+const gracefulShutdown = async () => {
+    console.log('Starting graceful shutdown...');
+    
+    // 1. Stop accepting new connections
+    wss.close(() => {
+        console.log('WebSocket server closed');
+    });
+
+    // 2. Close all client connections
+    clients.forEach(client => {
+        try {
+            client.close();
+        } catch (err) {
+            console.error('Error closing client:', err);
+        }
+    });
+
+    // 3. Send emergency stop to drone
+    try {
+        await new Promise((resolve) => {
+            droneClient.send('emergency', 0, 'emergency'.length, TELLO_PORT, TELLO_IP, () => {
+                resolve();
+            });
+        });
+    } catch (err) {
+        console.error('Error sending emergency command:', err);
+    }
+
+    // 4. Close UDP socket
+    droneClient.close();
+
+    // 5. Kill FFmpeg processes
+    if (ffmpegProcess) {
         ffmpegProcess.kill();
     }
     if (mp4Process) {
         mp4Process.kill();
     }
-    process.exit();
+
+    // 6. Close any open file streams
+    if (recordingStream) {
+        await new Promise(resolve => recordingStream.end(resolve));
+    }
+
+    console.log('Graceful shutdown completed');
+    process.exit(0);
+};
+
+// Handle different termination signals
+['SIGINT', 'SIGTERM', 'SIGQUIT'].forEach(signal => {
+    process.on(signal, gracefulShutdown);
 });
 
 // Serve static files
