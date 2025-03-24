@@ -203,19 +203,18 @@ function App() {
    * Toggle video stream
    */
   const toggleVideoStream = async () => {
-
-    // If stream is on, send 'streamoff', if off send 'streamon'
     const command = streamEnabled ? 'streamoff' : 'streamon';
-    
     try {
         const response = await fetch(`/drone/${command}`);
         
         if (response.ok) {
-            // If we're turning stream ON and player doesn't exist
-            if (!streamEnabled && !playerRef.current) {
+            if (command === 'streamoff' && playerRef.current) {
+                // Cleanup JSMpeg player when stopping stream
+                playerRef.current.destroy();
+                playerRef.current = null;
+            } else if (command === 'streamon' && !playerRef.current) {
                 initializePlayer();
             }
-            // Toggle state after checking conditions
             setStreamEnabled(!streamEnabled);
         }
     } catch (error) {
@@ -223,6 +222,16 @@ function App() {
         setError(`Failed to ${command}: ${error.message}`);
     }
   };
+
+  // Add cleanup effect for stream state changes
+  useEffect(() => {
+    return () => {
+        if (playerRef.current) {
+            playerRef.current.destroy();
+            playerRef.current = null;
+        }
+    };
+  }, [streamEnabled]); // Cleanup when stream state changes
 
   /**
    * Capture a photo from the video stream

@@ -22,7 +22,7 @@ const createMediaFolders = () => {
     // Creates all folders if they don't exist
     [uploadsDir, photosDir, tsDir, mp4Dir].forEach(dir => {
         if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, { recursive: true });
+            fs.mkdirSync(dir, { recursive: true }); // recursive: true allows creating nested directories
         }
     });
 
@@ -30,7 +30,7 @@ const createMediaFolders = () => {
 };
 
 // Initialize folders
-const { uploadsDir, photosDir, tsDir, mp4Dir } = createMediaFolders();
+const { photosDir, tsDir, mp4Dir } = createMediaFolders();
 
 // Initialize Express app
 const app = express();
@@ -82,11 +82,17 @@ app.get('/drone/:command', (req, res) => {
             }
         });
     } else if (command === 'streamoff') {
-        // Kill FFmpeg process when streaming is turned off
         if (ffmpegProcess) {
             ffmpegProcess.kill();
             ffmpegProcess = null;
         }
+        // Clear any remaining clients
+        clients.forEach(client => {
+            if (client.readyState === 1) {
+                client.close();
+            }
+        });
+        clients.clear();
         droneClient.send(command, 0, command.length, TELLO_PORT, TELLO_IP, (err) => {
             if (err) {
                 console.error('Error sending command:', err);
