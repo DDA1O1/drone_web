@@ -815,3 +815,25 @@ This multi-stage buffering system creates a balance between:
 - Network reliability (50MB UDP buffer)
 - Transmission efficiency (3.948KB chunks)
 - Display latency (256KB playback buffer)
+
+# Tello Drone Web Controller
+
+## Installation
+
+### Stable Version (Recommended for Production)
+```bash
+# Clone the stable release (v1.0.0)
+git clone -b v1.0.0 https://github.com/DDA1O1/drone_web.git
+cd drone_web
+npm install
+```
+
+### Latest Version (Development)
+```bash
+# Clone the latest code (may include unstable features)
+git clone https://github.com/DDA1O1/drone_web.git
+cd drone_web
+npm install
+```
+
+⚠️ **Note:** For production use, we recommend using the stable version (v1.0.0). The latest version may contain experimental features and bugs.

@@ -17,11 +17,18 @@ function App() {
   const [videoConnected, setVideoConnected] = useState(false);  // Video stream status
   const [droneConnected, setDroneConnected] = useState(false);  // Drone connection status
   const [error, setError] = useState(null);          // Error message state
+  const [streamEnabled, setStreamEnabled] = useState(false);    // Track if stream is enabled
+  const retryAttemptsRef = useRef(0);               // Track SDK mode entry attempts
   
   // Reconnection handling
   const reconnectTimeoutRef = useRef(null);          // Timeout for reconnection attempts
   const reconnectAttemptsRef = useRef(0);            // Counter for reconnection attempts
   const MAX_RECONNECT_ATTEMPTS = 5;                  // Maximum reconnection attempts
+  const MAX_SDK_RETRY_ATTEMPTS = 2;                  // Maximum attempts to enter SDK mode
+
+  // Add new states
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingFiles, setRecordingFiles] = useState(null);
 
   /**
    * Initializes the JSMpeg video player with optimized settings
@@ -98,17 +105,9 @@ function App() {
         // Extract actual player instance from VideoElement wrapper
         playerRef.current = playerRef.current.player;
 
-        // Monitor video performance
+        // Instead, we can use the supported player properties if needed
         if (playerRef.current) {
-          setInterval(() => {
-            const stats = playerRef.current.getVideoStats(); // Get video performance stats
-            console.log('Video Stats:', {
-              fps: stats.fps.toFixed(1), // FPS (frames per second)
-              decodedFrames: stats.decodedFrames, // Number of frames decoded
-              droppedFrames: stats.droppedFrames, // Number of frames dropped
-              bufferSize: (stats.bufferSize / 1024).toFixed(1) + 'KB' // Buffer size in KB
-            });
-          }, 5000); // Update stats every 5 seconds
+          console.log('Video player initialized');
         }
       } catch (err) {
         console.error('Player initialization error:', err);
@@ -119,36 +118,65 @@ function App() {
 
   // ==== LIFE CYCLE MANAGEMENT ====
   useEffect(() => {
-    initializePlayer();
     return () => {
-      // you have to clear the timeout even if you destroy the player instance cause timeout function is stored in browser memory otherwise it will keep running
+      // Clear timeouts
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
+      
+      // Cleanup video player and intervals
       if (playerRef.current) {
+        if (playerRef.current.statsInterval) {
+          clearInterval(playerRef.current.statsInterval);
+        }
         playerRef.current.destroy();
         playerRef.current = null;
       }
+      
+      // Reset states
+      setVideoConnected(false);
+      setDroneConnected(false);
+      setStreamEnabled(false);
+      setError(null);
+      
+      // Reset attempt counters
+      reconnectAttemptsRef.current = 0;
+      retryAttemptsRef.current = 0;
     };
-  }, []); // Empty array means this will only run once on mount and unmount and not on re-render
-
-  // Add event listener for drone connection
-  useEffect(() => {
-    const checkDroneStatus = async () => {
-      try {
-        const response = await fetch('/drone/command');
-        setDroneConnected(response.ok);
-      } catch (error) {
-        setDroneConnected(false);
-      }
-    };
-    
-    // Check initially and every 5 seconds
-    checkDroneStatus();
-    const interval = setInterval(checkDroneStatus, 5000);
-    
-    return () => clearInterval(interval);
   }, []);
+
+  /**
+   * Attempts to enter SDK mode with limited retries
+   */
+  const enterSDKMode = async () => {
+    if (retryAttemptsRef.current >= MAX_SDK_RETRY_ATTEMPTS) {
+      setError('Failed to connect to drone after maximum retry attempts');
+      return false;
+    }
+
+    try {
+      const response = await fetch('/drone/command');
+      if (response.ok) {
+        setDroneConnected(true);
+        setError(null);
+        retryAttemptsRef.current = 0;
+        return true;
+      }
+    } catch (error) {
+      console.error('Failed to enter SDK mode:', error);
+    }
+
+    retryAttemptsRef.current++;
+    return false;
+  };
+
+  // Handle video stream status changes
+  useEffect(() => {
+    if (!videoConnected && droneConnected) {
+      // If video stream is lost while drone was connected, check drone connection
+      enterSDKMode();
+    }
+  }, [videoConnected]);
 
   /**
    * Sends commands to the drone via HTTP API
@@ -165,6 +193,135 @@ function App() {
     } catch (error) {
       console.error('Error sending command:', error);
       setError(`Failed to send command: ${error.message}`);
+      // If command fails, attempt to re-enter SDK mode
+      setDroneConnected(false);
+      enterSDKMode();
+    }
+  };
+
+  /**
+   * Toggle video stream
+   */
+  const toggleVideoStream = async () => {
+
+    // If stream is on, send 'streamoff', if off send 'streamon'
+    const command = streamEnabled ? 'streamoff' : 'streamon';
+    
+    try {
+        const response = await fetch(`/drone/${command}`);
+        
+        if (response.ok) {
+            // If we're turning stream ON and player doesn't exist
+            if (!streamEnabled && !playerRef.current) {
+                initializePlayer();
+            }
+            // Toggle state after checking conditions
+            setStreamEnabled(!streamEnabled);
+        }
+    } catch (error) {
+        console.error('Error toggling video stream:', error);
+        setError(`Failed to ${command}: ${error.message}`);
+    }
+  };
+
+  /**
+   * Capture a photo from the video stream
+   */
+  const capturePhoto = async () => {
+    // First check: Ensure video container reference exists
+    if (!videoRef.current) return;
+    
+    try {
+        // Find the canvas element inside the video container
+        // JSMpeg creates this canvas automatically to display video
+        const canvas = videoRef.current.querySelector('canvas');
+        
+        // Second check: Ensure canvas was found
+        if (!canvas) {
+            console.error('No canvas element found');
+            return;
+        }
+
+        // Convert the current frame on canvas to a base64 PNG image
+        // toDataURL() creates a data URL containing image representation
+        // Format: "data:image/png;base64,<actual-base64-data>"
+        const imageData = canvas.toDataURL('image/png');
+        
+        // Make POST request to server to save the image
+        const response = await fetch('/save-photo', {
+            method: 'POST',  // Using POST method
+            headers: {
+                'Content-Type': 'application/json'  // Tell server we're sending JSON
+            },
+            // Convert our data to JSON string
+            // imageData contains the base64 image string
+            body: JSON.stringify({ imageData })
+        });
+
+        // Check if server successfully saved the photo
+        if (response.ok) {
+            // Get the filename server used to save the image
+            const { fileName } = await response.json();
+            console.log('Photo saved:', fileName);
+            setError(null);  // Clear any previous errors
+        } else {
+            // If server response wasn't ok, throw error
+            throw new Error('Failed to save photo');
+        }
+    } catch (error) {
+        // Handle any errors that occurred during the process
+        console.error('Error capturing photo:', error);
+        // Show error to user
+        setError('Failed to capture photo: ' + error.message);
+    }
+  };
+
+  /**
+   * Toggle video recording
+   */
+  const toggleRecording = async () => {
+    try {
+        // Check if we're not currently recording
+        if (!isRecording) {
+            // Make POST request to start recording endpoint
+            const response = await fetch('/start-recording', { method: 'POST' });
+            
+            if (response.ok) {
+                // Get the filenames (both .ts and .mp4) from server response
+                const files = await response.json();
+                // Save filenames in state for later reference
+                setRecordingFiles(files);
+                // Update recording status to true
+                setIsRecording(true);
+                // Clear any previous errors
+                setError(null);
+            } else {
+                // If server response wasn't ok, throw error
+                throw new Error('Failed to start recording');
+            }
+        } else {
+            // We are currently recording, so stop it
+            const response = await fetch('/stop-recording', { method: 'POST' });
+            
+            if (response.ok) {
+                // Update recording status to false
+                setIsRecording(false);
+                // Log the saved files info
+                console.log('Recording saved:', recordingFiles);
+                // Clear the stored filenames
+                setRecordingFiles(null);
+                // Clear any previous errors
+                setError(null);
+            } else {
+                // If server response wasn't ok, throw error
+                throw new Error('Failed to stop recording');
+            }
+        }
+    } catch (error) {
+        // Handle any errors in the process
+        console.error('Error toggling recording:', error);
+        // Show error to user
+        setError('Failed to toggle recording: ' + error.message);
     }
   };
 
@@ -176,9 +333,25 @@ function App() {
       <div className="status-container">
         <div className={`status ${droneConnected ? 'connected' : 'disconnected'}`}>
           Drone: {droneConnected ? 'Connected' : 'Disconnected'}
+          {!droneConnected && (
+            <button 
+              onClick={enterSDKMode}
+              className="connect-btn"
+            >
+              Connect Drone
+            </button>
+          )}
         </div>
         <div className={`status ${videoConnected ? 'connected' : 'disconnected'}`}>
           Video: {videoConnected ? 'Connected' : 'Disconnected'}
+          {droneConnected && (
+            <button 
+              onClick={toggleVideoStream}
+              className="connect-btn"
+            >
+              {streamEnabled ? 'Stop Video' : 'Start Video'}
+            </button>
+          )}
         </div>
         {error && <div className="error">{error}</div>}
       </div>
@@ -186,6 +359,29 @@ function App() {
       {/* Video stream container */}
       <div className="video-container">
         <div ref={videoRef}></div>
+      </div>
+
+      {/* Add media controls after video container */}
+      <div className="media-controls">
+        <button 
+          onClick={capturePhoto}
+          disabled={!videoConnected}
+          className="media-btn"
+        >
+          Take Photo
+        </button>
+        <button 
+          onClick={toggleRecording}
+          disabled={!videoConnected}
+          className={`media-btn ${isRecording ? 'recording' : ''}`}
+        >
+          {isRecording ? 'Stop Recording' : 'Start Recording'}
+        </button>
+        {isRecording && (
+          <span className="recording-info">
+            Recording in progress... (Will save as both MP4 and TS)
+          </span>
+        )}
       </div>
 
       {/* Drone control interface */}

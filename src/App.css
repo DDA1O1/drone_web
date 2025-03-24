@@ -142,3 +142,68 @@ button.emergency {
 button.emergency:hover {
   background-color: #da190b;
 }
+
+.connect-btn {
+  margin-left: 10px;
+  padding: 5px 10px;
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.connect-btn:hover {
+  background-color: #45a049;
+}
+
+.media-controls {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin: 1rem 0;
+}
+
+.media-btn {
+  padding: 0.5rem 1rem;
+  font-size: 1rem;
+  border: none;
+  border-radius: 4px;
+  background-color: #2196f3;
+  color: white;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.media-btn:hover {
+  background-color: #1976d2;
+}
+
+.media-btn:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+.media-btn.recording {
+  background-color: #f44336;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.recording-info {
+  margin-left: 1rem;
+  color: #f44336;
+  animation: pulse 2s infinite;
+  font-size: 0.9rem;
+}

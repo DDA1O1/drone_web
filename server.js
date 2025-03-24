@@ -4,9 +4,33 @@ import { spawn } from 'child_process';
 import dgram from 'dgram'; 
 import { fileURLToPath } from 'url'; 
 import { dirname, join } from 'path'; 
+import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+// Create separate folders for different media types
+const createMediaFolders = () => {
+    // First creates the main uploads folder
+    const uploadsDir = join(__dirname, 'uploads');
+    
+    // Then creates three subfolders inside uploads:
+    const photosDir = join(uploadsDir, 'photos');        // for photos
+    const tsDir = join(uploadsDir, 'ts_recordings');     // for .ts files
+    const mp4Dir = join(uploadsDir, 'mp4_recordings');   // for .mp4 files
+
+    // Creates all folders if they don't exist
+    [uploadsDir, photosDir, tsDir, mp4Dir].forEach(dir => {
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+    });
+
+    return { uploadsDir, photosDir, tsDir, mp4Dir };
+};
+
+// Initialize folders
+const { uploadsDir, photosDir, tsDir, mp4Dir } = createMediaFolders();
 
 // Initialize Express app
 const app = express();
@@ -53,6 +77,77 @@ app.get('/drone/:command', (req, res) => {
             res.send('Command sent');
         }
     });
+});
+
+// Define POST endpoint that handles photo saving
+// express.json() middleware parses incoming JSON requests
+app.post('/save-photo', express.json(), (req, res) => {
+    const { imageData } = req.body;
+    const fileName = `photo_${Date.now()}.png`;
+    const filePath = join(photosDir, fileName);
+    
+    const base64Data = imageData.replace(/^data:image\/png;base64,/, "");
+    
+    fs.writeFile(filePath, base64Data, 'base64', (err) => {
+        if (err) {
+            console.error('Error saving photo:', err);
+            res.status(500).send('Error saving photo');
+        } else {
+            res.json({ fileName });
+        }
+    });
+});
+
+// Add route for saving video chunks
+let recordingStream = null;
+let mp4Process = null;
+
+app.post('/start-recording', (req, res) => {
+    const timestamp = Date.now();
+    const tsFileName = `video_${timestamp}.ts`;
+    const mp4FileName = `video_${timestamp}.mp4`;
+    const tsFilePath = join(tsDir, tsFileName);
+    const mp4FilePath = join(mp4Dir, mp4FileName);
+    
+    // Create TS write stream
+    recordingStream = fs.createWriteStream(tsFilePath);
+    
+    // Start FFmpeg process for MP4 conversion
+    mp4Process = spawn('ffmpeg', [
+        '-i', 'pipe:0',           // Read from stdin
+        '-c:v', 'copy',           // Copy video codec (no re-encoding)
+        '-c:a', 'copy',           // Copy audio codec (no re-encoding)
+        '-bsf:a', 'aac_adtstoasc', // Fix AAC bitstream
+        '-movflags', '+faststart',  // Enable streaming
+        '-y',                     // Overwrite output file
+        mp4FilePath              // Output file
+    ]);
+
+    mp4Process.stderr.on('data', (data) => {
+        console.log('FFmpeg MP4:', data.toString());
+    });
+
+    mp4Process.on('error', (err) => {
+        console.error('FFmpeg MP4 error:', err);
+    });
+
+    res.json({ tsFileName, mp4FileName });
+});
+
+app.post('/stop-recording', (req, res) => {
+    if (recordingStream || mp4Process) {
+        if (recordingStream) {
+            recordingStream.end();
+            recordingStream = null;
+        }
+        if (mp4Process) {
+            mp4Process.stdin.end(); // close the input stream
+            mp4Process = null; // clear the reference
+        }
+        res.send('Recording stopped');
+    } else {
+        res.status(400).send('No active recording');
+    }
 });
 
 // Initialize drone connection
@@ -159,6 +254,16 @@ function startFFmpeg() {
                     }
                 }
             });
+            
+            // Save to both formats if recording
+            if (recordingStream) {
+                // write to .ts file directly
+                recordingStream.write(chunk);
+                // write to Mp4 file using ffmpeg process
+                if (mp4Process && mp4Process.stdin.writable) {
+                    mp4Process.stdin.write(chunk);
+                }
+            }
         }
     });
 
@@ -181,6 +286,9 @@ function startFFmpeg() {
 process.on('SIGINT', () => { // Handle Ctrl+C (SIGINT) to stop the server
     if (ffmpegProcess) { // can access ffmpegProcess because it's a global variable
         ffmpegProcess.kill();
+    }
+    if (mp4Process) {
+        mp4Process.kill();
     }
     process.exit();
 });
