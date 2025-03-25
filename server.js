@@ -120,18 +120,38 @@ app.get('/drone/:command', (req, res) => {
                     requestingClient.close();
                 }
                 
-                // Only kill FFmpeg and send streamoff if no clients left
+                // Only handle streamoff if no clients left
                 if (clients.size === 0) {
-                    if (ffmpegProcess) {
-                        ffmpegProcess.kill();
-                        ffmpegProcess = null;
-                    }
+                    // First send streamoff command to drone
                     droneClient.send(command, 0, command.length, TELLO_PORT, TELLO_IP, (err) => {
                         if (err) {
                             console.error('Error sending streamoff command:', err);
                             return res.status(500).send('Error sending command');
                         }
-                        res.send('Command sent');
+                        
+                        // Wait for drone acknowledgment before killing FFmpeg
+                        const timeout = setTimeout(() => {
+                            if (ffmpegProcess) {
+                                ffmpegProcess.kill();
+                                ffmpegProcess = null;
+                            }
+                            res.send('Stream stopped (timeout)');
+                        }, 1000); // Wait up to 1 second for acknowledgment
+
+                        // Listen for drone response
+                        const responseHandler = (msg) => {
+                            if (msg.toString().includes('ok')) {
+                                clearTimeout(timeout);
+                                if (ffmpegProcess) {
+                                    ffmpegProcess.kill();
+                                    ffmpegProcess = null;
+                                }
+                                droneClient.removeListener('message', responseHandler);
+                                res.send('Stream stopped successfully');
+                            }
+                        };
+
+                        droneClient.on('message', responseHandler);
                     });
                 } else {
                     res.send('Client disconnected but stream continues for other viewers');
