@@ -155,21 +155,26 @@ function App() {
    * Attempts to enter SDK mode with limited retries
    */
   const enterSDKMode = async () => {
+    // Clear error at the start of new connection attempt
+    setError(null);
+    
     if (retryAttemptsRef.current >= MAX_SDK_RETRY_ATTEMPTS) {
-      setError('Failed to connect to drone after maximum retry attempts');
-      return false;
+        setError('Failed to connect to drone after maximum retry attempts');
+        return false;
     }
 
     try {
-      const response = await fetch('/drone/command');
-      if (response.ok) {
-        setDroneConnected(true);
-        setError(null);
-        retryAttemptsRef.current = 0;
-        return true;
-      }
+        const response = await fetch('/drone/command');
+        if (response.ok) {
+            setDroneConnected(true);
+            retryAttemptsRef.current = 0;
+            return true;
+        }
+        // Set specific error for failed response
+        setError('Failed to connect to drone - please try again');
     } catch (error) {
-      console.error('Failed to enter SDK mode:', error);
+        console.error('Failed to enter SDK mode:', error);
+        setError(`Connection error: ${error.message}`);
     }
 
     retryAttemptsRef.current++;
