@@ -91,10 +91,83 @@ wss.on('connection', (ws) => {
     }
 });
 
+// Handle drone responses
+droneClient.on('message', (msg) => {
+    const response = msg.toString();
+    
+    // Parse specific command responses
+    if (!isNaN(response)) {
+        if (lastCommand === 'battery?') {
+            clients.forEach(client => {
+                if (client.readyState === 1) {
+                    client.send(JSON.stringify({
+                        type: 'battery',
+                        value: parseInt(response)
+                    }));
+                }
+            });
+        } else if (lastCommand === 'time?') {
+            clients.forEach(client => {
+                if (client.readyState === 1) {
+                    client.send(JSON.stringify({
+                        type: 'flightTime',
+                        value: parseInt(response)
+                    }));
+                }
+            });
+        } else if (lastCommand === 'speed?') {
+            clients.forEach(client => {
+                if (client.readyState === 1) {
+                    client.send(JSON.stringify({
+                        type: 'speed',
+                        value: parseInt(response)
+                    }));
+                }
+            });
+        }
+    }
+    
+    console.log('Drone response:', response);
+});
+
+// Track last command sent
+let lastCommand = '';
+
+// Track monitoring intervals
+let monitoringIntervals = [];
+
+// Start periodic state monitoring
+function startDroneMonitoring() {
+    // Clear any existing intervals first
+    stopDroneMonitoring();
+    
+    // Check battery every 10 seconds
+    monitoringIntervals.push(setInterval(() => {
+        droneClient.send('battery?', 0, 'battery?'.length, TELLO_PORT, TELLO_IP);
+    }, 10000));
+
+    // Check flight time every 5 seconds
+    monitoringIntervals.push(setInterval(() => {
+        droneClient.send('time?', 0, 'time?'.length, TELLO_PORT, TELLO_IP);
+    }, 5000));
+
+    // Check speed every 2 seconds
+    monitoringIntervals.push(setInterval(() => {
+        droneClient.send('speed?', 0, 'speed?'.length, TELLO_PORT, TELLO_IP);
+    }, 2000));
+}
+
+// Stop all monitoring intervals
+function stopDroneMonitoring() {
+    monitoringIntervals.forEach(interval => clearInterval(interval));
+    monitoringIntervals = [];
+}
+
 // Add route for drone commands
 app.get('/drone/:command', (req, res) => {
     try {
         const command = req.params.command;
+        lastCommand = command;
         
         if (command === 'streamon') {
             droneClient.send(command, 0, command.length, TELLO_PORT, TELLO_IP, (err) => {
@@ -160,6 +233,16 @@ app.get('/drone/:command', (req, res) => {
                 console.error('Error handling streamoff:', error);
                 res.status(500).send('Error processing streamoff command');
             }
+        } else if (command === 'command') {
+            droneClient.send(command, 0, command.length, TELLO_PORT, TELLO_IP, (err) => {
+                if (err) {
+                    console.error('Error sending command:', err);
+                    return res.status(500).send('Error sending command');
+                }
+                // Start monitoring after SDK mode is initialized
+                startDroneMonitoring();
+                res.send('Command sent');
+            });
         } else {
             // Send other commands normally
             droneClient.send(command, 0, command.length, TELLO_PORT, TELLO_IP, (err) => {
@@ -319,11 +402,6 @@ app.post('/stop-recording', (req, res) => {
     }
 });
 
-// Handle drone responses
-droneClient.on('message', (msg) => {
-    console.log('Drone response:', msg.toString());
-});
-
 // Global variable act as a single source of truth for FFmpeg process
 // This allows us to kill the old process before starting a new one multiple times before reaching the return statement
 // would not have been possible if we used the return statement from startFFmpeg
@@ -464,6 +542,9 @@ function startFFmpeg() {
 // Add this improved graceful shutdown handler
 const gracefulShutdown = async () => {
     console.log('Starting graceful shutdown...');
+    
+    // Stop monitoring first
+    stopDroneMonitoring();
     
     // 1. Stop accepting new connections
     wss.close(() => {
