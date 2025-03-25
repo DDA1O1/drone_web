@@ -256,22 +256,27 @@ app.post('/stop-recording', (req, res) => {
     if (recordingStream || mp4Process) {
         try {
             if (recordingStream) {
-                recordingStream.end();
-                // Wait for 'finish' event to ensure proper closure
+                // Attach handlers BEFORE ending the stream
                 recordingStream.on('finish', () => {
                     recordingStream = null;
                 });
+                
                 recordingStream.on('error', (err) => {
                     console.error('Error closing recording stream:', err);
+                    recordingStream = null;
                 });
+                
+                // End the stream after handlers are attached
+                recordingStream.end();
             }
             
             if (mp4Process && mp4Process.stdin.writable) {
-                mp4Process.stdin.end();
                 mp4Process.on('close', (code) => {
                     console.log(`MP4 process closed with code ${code}`);
                     mp4Process = null;
                 });
+                
+                mp4Process.stdin.end();
             }
             
             res.send('Recording stopped');
