@@ -12,6 +12,7 @@ function App() {
   // Refs for managing video player and container
   const videoRef = useRef(null);      // Reference to video container div and since it is a container, that doesn't change often we use useRef
   const playerRef = useRef(null);     // Reference to JSMpeg player instance
+  const isToggling = useRef(false);   // Add this new ref for toggle state
   
   // State management
   const [videoConnected, setVideoConnected] = useState(false);  // Video stream status
@@ -205,26 +206,32 @@ function App() {
   };
 
   /**
-   * Toggle video stream
+   * Toggle video stream with race condition protection
    */
   const toggleVideoStream = async () => {
+    if (isToggling.current) return; // Prevent multiple simultaneous toggles
+    
     const command = streamEnabled ? 'streamoff' : 'streamon';
+    isToggling.current = true;
+    
     try {
         const response = await fetch(`/drone/${command}`);
         
         if (response.ok) {
             if (command === 'streamoff' && playerRef.current) {
-                // Cleanup JSMpeg player when stopping stream
                 playerRef.current.destroy();
                 playerRef.current = null;
-            } else if (command === 'streamon' && !playerRef.current) {
-                initializePlayer();
+                setStreamEnabled(false);
+            } else if (command === 'streamon') {
+                await initializePlayer();
+                setStreamEnabled(true);
             }
-            setStreamEnabled(!streamEnabled);
         }
     } catch (error) {
         console.error('Error toggling video stream:', error);
         setError(`Failed to ${command}: ${error.message}`);
+    } finally {
+        isToggling.current = false;
     }
   };
 
