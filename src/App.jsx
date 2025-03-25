@@ -12,7 +12,6 @@ function App() {
   // Refs for managing video player and container
   const videoRef = useRef(null);      // Reference to video container div and since it is a container, that doesn't change often we use useRef
   const playerRef = useRef(null);     // Reference to JSMpeg player instance
-  const isToggling = useRef(false);   // Add this new ref for toggle state
   
   // State management
   const [videoConnected, setVideoConnected] = useState(false);  // Video stream status
@@ -36,89 +35,102 @@ function App() {
    * Handles connection, error states, and reconnection logic
    */
   const initializePlayer = () => {
+    console.log('Initialize player called');
     if (videoRef.current && !playerRef.current) {
       try {
-        // Connect to WebSocket stream server
         const url = `ws://${window.location.hostname}:3001`;
-        console.log('Connecting to stream at:', url);
+        console.log('Attempting WebSocket connection to:', url);
         
-        // Initialize JSMpeg player with optimized settings
-        playerRef.current = new JSMpeg.VideoElement(
-          videoRef.current,
-          url,
-          {
-            // Basic configuration
-            autoplay: true, // Automatically start the video stream
-            audio: false, //drone doesn't have audio
-            
-            // Performance optimizations
-            videoBufferSize: 256 * 1024,    // 256KB buffer for reduced latency
-            streaming: true, //// Optimize for live streaming
-            maxAudioLag: 0, // No audio lag
-            disableGl: false,               // Use WebGL for hardware acceleration
-            // Makes video decoding faster using GPU
-            progressive: true,              // Load and play frames as they arrive
-            // Don't wait for full buffer
-            chunkSize: 3948,               // Matches server's MPEGTS_PACKET_SIZE * PACKETS_PER_CHUNK (188 * 21)
-            decodeFirstFrame: true,         // Fast initial display
-            preserveDrawingBuffer: false,   // Don't keep old frames in memory
-            throttled: false,               // Real-time streaming
-            
-            // Event handlers for stream management
-            onSourceEstablished: () => {
-              console.log('Stream source established');
-              // Clear any pending reconnection timeout
-              if (reconnectTimeoutRef.current) {
-                clearTimeout(reconnectTimeoutRef.current);
-                reconnectTimeoutRef.current = null;
+        // Test the WebSocket connection first
+        const testWs = new WebSocket(url);
+        
+        testWs.onopen = () => {
+          console.log('Test WebSocket connection successful');
+          testWs.close(); // Close test connection
+          
+          // Now initialize the actual player
+          try {
+            playerRef.current = new JSMpeg.VideoElement(
+              videoRef.current,
+              url,
+              {
+                // Basic configuration
+                autoplay: true, // Automatically start the video stream
+                audio: false, //drone doesn't have audio
+                
+                // Performance optimizations
+                videoBufferSize: 256 * 1024,    // 256KB buffer for reduced latency
+                streaming: true, //// Optimize for live streaming
+                maxAudioLag: 0, // No audio lag
+                disableGl: false,               // Use WebGL for hardware acceleration
+                // Makes video decoding faster using GPU
+                progressive: true,              // Load and play frames as they arrive
+                // Don't wait for full buffer
+                chunkSize: 3948,               // Matches server's MPEGTS_PACKET_SIZE * PACKETS_PER_CHUNK (188 * 21)
+                decodeFirstFrame: true,         // Fast initial display
+                preserveDrawingBuffer: false,   // Don't keep old frames in memory
+                throttled: false,               // Real-time streaming
+
+                // Connection callbacks
+                onConnect: () => {
+                  console.log('WebSocket connected');
+                  setVideoConnected(true);
+                  reconnectAttemptsRef.current = 0;
+                  setError(null);
+                },
+                
+                // Video callbacks
+                onPlay: () => {
+                  console.log('Video started playing');
+                  setVideoConnected(true);
+                },
+
+                onDestroy: () => {
+                  console.log('Player destroyed');
+                  setVideoConnected(false);
+                },
+
+                onSourceEstablished: () => {
+                  console.log('Source established');
+                  setVideoConnected(true);
+                },
+
+                onSourceCompleted: () => {
+                  console.log('Source completed');
+                },
+
+                onSourceError: (err) => {
+                  console.error('Source error:', err);
+                  setVideoConnected(false);
+                  setError(`Video stream error: ${err}`);
+                }
               }
-              reconnectAttemptsRef.current = 0;
-              setVideoConnected(true);
-              setError(null);
-            },
-            onSourceCompleted: () => {
-              console.log('Stream completed'); // Log when stream is completed like when the drone stops streaming
-            },
-            onStalled: () => {
-              console.log('Stream stalled'); // Log when stream is stalled like for temporary network issues but connection is still exist
-              setError('Video stream stalled - attempting to reconnect...');
-            },
-            onEnded: () => {
-              console.log('Stream ended'); //log when connection is lost or terminated
-              setVideoConnected(false);
-              
-              // Implement exponential backoff reconnection
-              if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
-                reconnectAttemptsRef.current++;
-                const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 10000);
-                reconnectTimeoutRef.current = setTimeout(() => {
-                  // This function lives independently
-                  // even if the player instance is destroyed
-                  console.log(`Reconnect attempt ${reconnectAttemptsRef.current}`);
-                  if (playerRef.current) {
-                    playerRef.current.destroy();
-                    playerRef.current = null;
-                  }
-                  initializePlayer();
-                }, delay);
-              } else {
-                setError('Failed to connect to video stream after multiple attempts. Please refresh the page.');
-              }
-            }
+            );
+
+            // Extract actual player instance
+            playerRef.current = playerRef.current.player;
+            console.log('Video player initialized successfully');
+            
+          } catch (err) {
+            console.error('JSMpeg initialization error:', err);
+            setError(`Failed to initialize video player: ${err.message}`);
           }
-        );
-
-        // Extract actual player instance from VideoElement wrapper
-        playerRef.current = playerRef.current.player;
-
-        // Instead, we can use the supported player properties if needed
-        if (playerRef.current) {
-          console.log('Video player initialized');
-        }
+        };
+        
+        testWs.onerror = (error) => {
+          console.error('WebSocket connection failed:', error);
+          setError('Failed to connect to video stream server. Please check if the server is running.');
+        };
+        
       } catch (err) {
         console.error('Player initialization error:', err);
         setError(`Failed to initialize video: ${err.message}`);
       }
+    } else {
+      console.log('Initialize player conditions not met:', {
+        videoRefExists: !!videoRef.current,
+        playerRefExists: !!playerRef.current
+      });
     }
   };
 
@@ -155,26 +167,21 @@ function App() {
    * Attempts to enter SDK mode with limited retries
    */
   const enterSDKMode = async () => {
-    // Clear error at the start of new connection attempt
-    setError(null);
-    
     if (retryAttemptsRef.current >= MAX_SDK_RETRY_ATTEMPTS) {
-        setError('Failed to connect to drone after maximum retry attempts');
-        return false;
+      setError('Failed to connect to drone after maximum retry attempts');
+      return false;
     }
 
     try {
-        const response = await fetch('/drone/command');
-        if (response.ok) {
-            setDroneConnected(true);
-            retryAttemptsRef.current = 0;
-            return true;
-        }
-        // Set specific error for failed response
-        setError('Failed to connect to drone - please try again');
+      const response = await fetch('/drone/command');
+      if (response.ok) {
+        setDroneConnected(true);
+        setError(null);
+        retryAttemptsRef.current = 0;
+        return true;
+      }
     } catch (error) {
-        console.error('Failed to enter SDK mode:', error);
-        setError(`Connection error: ${error.message}`);
+      console.error('Failed to enter SDK mode:', error);
     }
 
     retryAttemptsRef.current++;
@@ -211,32 +218,30 @@ function App() {
   };
 
   /**
-   * Toggle video stream with race condition protection
+   * Toggle video stream
    */
   const toggleVideoStream = async () => {
-    if (isToggling.current) return; // Prevent multiple simultaneous toggles
-    
     const command = streamEnabled ? 'streamoff' : 'streamon';
-    isToggling.current = true;
-    
+    console.log('Attempting to', command);
     try {
         const response = await fetch(`/drone/${command}`);
         
         if (response.ok) {
+            console.log('Command successful:', command);
             if (command === 'streamoff' && playerRef.current) {
+                console.log('Cleaning up player');
                 playerRef.current.destroy();
                 playerRef.current = null;
-                setStreamEnabled(false);
-            } else if (command === 'streamon') {
-                await initializePlayer();
-                setStreamEnabled(true);
+                setVideoConnected(false);
+            } else if (command === 'streamon' && !playerRef.current) {
+                console.log('Initializing player');
+                initializePlayer();
             }
+            setStreamEnabled(!streamEnabled);
         }
     } catch (error) {
         console.error('Error toggling video stream:', error);
         setError(`Failed to ${command}: ${error.message}`);
-    } finally {
-        isToggling.current = false;
     }
   };
 
@@ -350,6 +355,14 @@ function App() {
         setError('Failed to toggle recording: ' + error.message);
     }
   };
+
+  // Add useEffect to monitor state changes
+  useEffect(() => {
+    console.log('Video Connected:', videoConnected);
+    console.log('Drone Connected:', droneConnected);
+    console.log('Stream Enabled:', streamEnabled);
+    console.log('Is Recording:', isRecording);
+  }, [videoConnected, droneConnected, streamEnabled, isRecording]);
 
   return (
     <div className="container">

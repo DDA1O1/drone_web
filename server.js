@@ -45,49 +45,45 @@ const TELLO_VIDEO_PORT = 11111;
 // Create UDP client for drone commands
 const droneClient = dgram.createSocket('udp4');
 
-// Create WebSocket server for video streaming
-const wss = new WebSocketServer({ port: streamPort });
+// Create WebSocket server with explicit error handling
+const wss = new WebSocketServer({ 
+    port: streamPort,
+    clientTracking: true, // Enable client tracking
+    handleProtocols: () => 'ws' // Force ws protocol
+});
+
 const clients = new Set(); // Set only stores unique values
 let nextClientId = 0;  // Add client ID counter
 
-// Handle WebSocket connections
-wss.on('connection', (ws) => {
+// Add proper WebSocket server event handlers
+wss.on('listening', () => {
+    console.log(`WebSocket server is listening on port ${streamPort}`);
+});
+
+wss.on('error', (error) => {
+    console.error('WebSocket server error:', error);
+});
+
+wss.on('connection', (ws, req) => {
     try {
         ws.clientId = nextClientId++;
         clients.add(ws);
-        console.log(`Client ${ws.clientId} connected. Total clients: ${clients.size}`);
-        
+        console.log(`Client ${ws.clientId} connected from ${req.socket.remoteAddress}`);
+        console.log(`Total connected clients: ${clients.size}`);
+
         ws.on('error', (error) => {
             console.error(`Client ${ws.clientId} error:`, error);
         });
 
-        ws.on('close', () => {
-            try {
-                clients.delete(ws);
-                console.log(`Client ${ws.clientId} disconnected. Total clients: ${clients.size}`);
-                
-                // Only stop video if this was the last client
-                if (clients.size === 0) {
-                    try {
-                        if (ffmpegProcess) {
-                            ffmpegProcess.kill();
-                            ffmpegProcess = null;
-                        }
-                        // Send streamoff to drone only when last viewer disconnects
-                        droneClient.send('streamoff', 0, 'streamoff'.length, TELLO_PORT, TELLO_IP, (err) => {
-                            if (err) console.error('Error sending streamoff command:', err);
-                        });
-                    } catch (error) {
-                        console.error('Error cleaning up resources:', error);
-                    }
-                }
-            } catch (error) {
-                console.error('Error in close handler:', error);
-            }
+        ws.on('close', (code, reason) => {
+            console.log(`Client ${ws.clientId} disconnected. Code: ${code}, Reason: ${reason}`);
+            clients.delete(ws);
+            console.log(`Remaining clients: ${clients.size}`);
         });
+
     } catch (error) {
-        console.error('Error in WebSocket connection:', error);
-        ws.close();
+        console.error('Error in WebSocket connection handler:', error);
+        ws.close(1011, 'Internal Server Error');
     }
 });
 
@@ -409,9 +405,11 @@ let ffmpegProcess = null;
 
 // Start FFmpeg process for video streaming
 function startFFmpeg() {
+    console.log('Starting FFmpeg process...');
     if (ffmpegProcess) {
+        console.log('Killing existing FFmpeg process...');
         try {
-            ffmpegProcess.kill(); //Kill old process before starting new one
+            ffmpegProcess.kill();
         } catch (err) {
             console.error('Error killing existing FFmpeg process:', err);
         }
@@ -599,8 +597,31 @@ const gracefulShutdown = async () => {
 // Serve static files
 app.use(express.static(join(__dirname, 'dist')));
 
-// Start servers
-app.listen(port, () => {
-    console.log(`Express server running on http://localhost:${port}`);
-    console.log(`WebSocket server running on ws://localhost:${streamPort}`);
-}); 
+// Start servers sequentially
+const startServers = async () => {
+    try {
+        // Start Express server first
+        await new Promise((resolve) => {
+            app.listen(port, () => {
+                console.log(`Express server running on http://localhost:${port}`);
+                resolve();
+            });
+        });
+
+        // Verify WebSocket server is running
+        if (wss.readyState !== wss.OPEN) {
+            console.log('Waiting for WebSocket server to be ready...');
+            await new Promise((resolve) => {
+                wss.once('listening', resolve);
+            });
+        }
+        
+        console.log('Both servers are running');
+        
+    } catch (error) {
+        console.error('Error starting servers:', error);
+        process.exit(1);
+    }
+};
+
+startServers(); 
