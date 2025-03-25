@@ -213,6 +213,11 @@ let recordingStream = null;
 let mp4Process = null;
 
 app.post('/start-recording', (req, res) => {
+    // Check if recording is already in progress
+    if (recordingStream || mp4Process) {
+        return res.status(409).send('Recording already in progress');
+    }
+
     const timestamp = Date.now();
     const tsFileName = `video_${timestamp}.ts`;
     const mp4FileName = `video_${timestamp}.mp4`;
@@ -263,12 +268,17 @@ app.post('/start-recording', (req, res) => {
         }
         
     } catch (error) {
+        // Clean up if error occurs during setup
+        if (recordingStream) {
+            recordingStream.end();
+            recordingStream = null;
+        }
+        if (mp4Process) {
+            mp4Process.kill();
+            mp4Process = null;
+        }
         console.error('Error starting recording:', error);
         res.status(500).send('Failed to start recording');
-        
-        // Cleanup on error
-        if (recordingStream) recordingStream.end();
-        if (mp4Process) mp4Process.kill();
     }
 });
 
