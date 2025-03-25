@@ -66,6 +66,11 @@ function App() {
             // Event handlers for stream management
             onSourceEstablished: () => {
               console.log('Stream source established');
+              // Clear any pending reconnection timeout
+              if (reconnectTimeoutRef.current) {
+                clearTimeout(reconnectTimeoutRef.current);
+                reconnectTimeoutRef.current = null;
+              }
               reconnectAttemptsRef.current = 0;
               setVideoConnected(true);
               setError(null);
