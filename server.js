@@ -200,10 +200,10 @@ app.post('/start-recording', (req, res) => {
     const mp4FilePath = join(mp4Dir, mp4FileName);
     
     try {
-        // Critical operations that could fail
+        // Create write stream
         recordingStream = fs.createWriteStream(tsFilePath);
         
-        // Start FFmpeg process for MP4 conversion
+        // Set up the mp4 conversion process
         mp4Process = spawn('ffmpeg', [
             '-i', 'pipe:0',
             '-c:v', 'copy',
@@ -214,7 +214,7 @@ app.post('/start-recording', (req, res) => {
             mp4FilePath
         ]);
 
-        // Add error handlers for the processes
+        // Add error handlers
         mp4Process.stderr.on('data', (data) => {
             console.log('FFmpeg MP4:', data.toString());
         });
@@ -223,7 +223,24 @@ app.post('/start-recording', (req, res) => {
             console.error('FFmpeg MP4 error:', err);
         });
 
-        res.json({ tsFileName, mp4FileName });
+        // Wait for streams to be ready before responding
+        recordingStream.on('open', () => {
+            if (mp4Process && mp4Process.stdin.writable) {
+                res.json({ tsFileName, mp4FileName });
+            } else {
+                cleanupAndRespond('MP4 process failed to initialize');
+            }
+        });
+        
+        recordingStream.on('error', (err) => {
+            cleanupAndRespond(`TS stream error: ${err.message}`);
+        });
+        
+        function cleanupAndRespond(errorMsg) {
+            if (recordingStream) recordingStream.end();
+            if (mp4Process && mp4Process.stdin.writable) mp4Process.stdin.end();
+            res.status(500).send(errorMsg || 'Failed to start recording');
+        }
         
     } catch (error) {
         console.error('Error starting recording:', error);
