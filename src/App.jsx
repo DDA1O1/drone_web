@@ -50,43 +50,41 @@ function App() {
           
           // Now initialize the actual player
           try {
-            playerRef.current = new JSMpeg(url, videoRef.current, {
+            playerRef.current = new JSMpeg.VideoElement(videoRef.current, url, {
               // Performance optimizations
               videoBufferSize: 256 * 1024,    // 256KB buffer for reduced latency
               streaming: true,                 // Optimize for live streaming
-              maxAudioLag: 0,                 // No audio lag
-              disableWebAssembly: false,      // Use WebAssembly for better performance
+              autoplay: true,                 // Start playing immediately
+              control: true,                  // Show video controls
+              loop: false,                    // Don't loop the video
+              decodeFirstFrame: true,         // Decode and display first frame
               progressive: true,              // Load and play frames as they arrive
               chunkSize: 3948,               // Matches server's MPEGTS_PACKET_SIZE * PACKETS_PER_CHUNK
               
-              // Callbacks
-              onPlay: () => {
-                console.log('Video started playing');
-                setVideoConnected(true);
-              },
-              onPause: () => {
-                console.log('Video paused');
-              },
-              onEnded: () => {
-                console.log('Video ended');
-                setVideoConnected(false);
-              },
-              onSourceEstablished: () => {
-                console.log('Source established');
-                setVideoConnected(true);
-                reconnectAttemptsRef.current = 0;
-                setError(null);
-              },
-              onSourceCompleted: () => {
-                console.log('Source completed');
-              },
-              onSourceError: (err) => {
-                console.error('Source error:', err);
-                setVideoConnected(false);
-                setError(`Video stream error: ${err}`);
+              // Hook functions
+              hooks: {
+                play: () => {
+                  console.log('Video started playing');
+                  setVideoConnected(true);
+                },
+                pause: () => {
+                  console.log('Video paused');
+                },
+                stop: () => {
+                  console.log('Video stopped');
+                  setVideoConnected(false);
+                },
+                load: () => {
+                  console.log('Source established');
+                  setVideoConnected(true);
+                  reconnectAttemptsRef.current = 0;
+                  setError(null);
+                }
               }
             });
 
+            // Store the player instance for API access
+            playerRef.current = playerRef.current.player;
             console.log('Video player initialized successfully');
             
           } catch (err) {
