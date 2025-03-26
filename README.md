@@ -971,3 +971,87 @@ This architecture ensures:
 - Clean connection closure
 - Proper stream management
 - Scalable client handling
+
+## Understanding Our Streaming Architecture vs HLS
+
+### Our Current System: Direct MPEG-TS Streaming
+
+Our implementation uses direct MPEG-TS streaming over WebSocket, which is optimized for low-latency drone control:
+
+```text
+Drone → FFmpeg (MPEG-TS) → WebSocket → JSMpeg Player
+```
+
+Key characteristics:
+- **Low Latency**: ~200-500ms delay
+- **Direct Streaming**: No segmentation or playlist files
+- **Continuous Flow**: Single unbroken stream
+- **Memory Efficient**: 4KB chunks aligned to MPEG-TS packets
+- **Real-time Processing**: Immediate frame delivery
+
+### Why Not HLS?
+
+HTTP Live Streaming (HLS) works differently:
+
+```text
+Video → Segmenter → (.ts segments + .m3u8 playlist) → HTTP Server → Player
+```
+
+While HLS is excellent for general video streaming, it's not ideal for drone control because:
+
+1. **Higher Latency**: 
+   - HLS requires multiple segments (typically 10 seconds each)
+   - Players need to buffer several segments
+   - Results in 10-30 seconds of latency
+
+2. **Complex Architecture**:
+   - Requires segment management
+   - Needs playlist (.m3u8) generation
+   - More server-side complexity
+
+3. **Resource Usage**:
+   - Must store video segments on disk
+   - Requires more server resources
+   - Higher bandwidth usage
+
+### Why Our Approach Works Better
+
+For drone control, our current implementation is superior because:
+
+1. **Real-time Control**:
+   - Minimal latency for responsive drone control
+   - Direct feedback from drone camera
+   - No segment buffering delay
+
+2. **Resource Efficiency**:
+   - No disk storage needed
+   - Memory-efficient streaming
+   - Optimized network usage
+
+3. **Simplified Architecture**:
+   - Single continuous stream
+   - No segment management
+   - Direct WebSocket delivery
+
+### Technical Implementation
+
+```javascript
+// FFmpeg outputs continuous MPEG-TS stream
+const MPEGTS_PACKET_SIZE = 188;    // Standard TS packet size
+const PACKETS_PER_CHUNK = 21;      // Optimal chunk size
+const CHUNK_SIZE = 3948;           // 188 * 21 bytes
+
+// Chunks are immediately sent via WebSocket
+while (streamBuffer.length >= CHUNK_SIZE) {
+    const chunk = streamBuffer.subarray(0, CHUNK_SIZE);
+    clients.forEach(client => {
+        if (client.readyState === 1) {
+            client.send(chunk, { binary: true });
+        }
+    });
+}
+```
+
+### Conclusion
+
+While HLS is the standard choice for video streaming services, our direct MPEG-TS over WebSocket approach is better suited for drone control applications where low latency is critical. The simplicity and efficiency of our implementation provide the real-time responsiveness needed for effective drone operation.
