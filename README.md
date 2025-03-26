@@ -8,23 +8,27 @@
    - FFmpeg Process: Handles video transcoding
 
 2. **Communication Flow**
-   ```
+
+   ```text
    Tello Drone (UDP 11111) -> FFmpeg -> WebSocket (3001) -> Browser (JSMpeg)
    ```
 
 ## Key Implementation Details
 
 ### 1. Drone Communication
+
 ```javascript
 const TELLO_IP = '192.168.10.1'
 const TELLO_PORT = 8889
 const TELLO_VIDEO_PORT = 11111
 ```
+
 - Uses UDP protocol for drone commands
 - Requires initial "command" and "streamon" commands
 - Video stream received on UDP port 11111
 
 ### 2. Video Processing
+
 ```javascript
 FFmpeg Configuration:
 - Input: UDP stream (port 11111)
@@ -38,6 +42,7 @@ FFmpeg Configuration:
 ```
 
 ### 3. Data Flow
+
 1. Drone streams H264 video over UDP
 2. FFmpeg converts to MPEG1 with optimized settings
 3. Server chunks data into 4KB packets
@@ -130,6 +135,7 @@ FFmpeg Configuration:
 ## Why These Technical Choices Matter
 
 ### Video Pipeline Decisions
+
 1. **H264 to MPEG1 Conversion**
    - H264: Drone's native format, good compression but complex decoding
    - MPEG1: Chosen for:
@@ -164,6 +170,7 @@ FFmpeg Configuration:
    - Standard protocol for drone control
 
 ### Performance Decisions
+
 1. **Buffer Sizes**
    - Video (256KB): Small enough for low latency
    - FIFO (50MB): Large enough to handle network hiccups
@@ -182,6 +189,7 @@ FFmpeg Configuration:
    - Chunk-based recovery: No need to restart stream
 
 These choices create a balance between:
+
 - Latency vs Quality
 - CPU Usage vs Features
 - Memory Usage vs Smoothness
@@ -190,6 +198,7 @@ These choices create a balance between:
 ## Understanding Video Buffering System
 
 ### How Chunks and Buffer Work Together
+
 1. **Chunk System (4KB)**
    - Video stream is split into 4KB chunks
    - Server sends chunks immediately via WebSocket
@@ -200,11 +209,14 @@ These choices create a balance between:
    - Browser maintains a 256KB rolling buffer
    - Can hold approximately 64 chunks (256KB ÷ 4KB)
    - Initial buffering phase:
-     ```
+
+     ```text
      [Empty Buffer] → [Filling: 4KB, 8KB, ...] → [Full: 256KB]
      ```
+
    - Continuous operation:
-     ```
+
+     ```text
      [New Chunks In] → [256KB Rolling Window] → [Old Chunks Out]
      ```
 
@@ -214,7 +226,7 @@ These choices create a balance between:
      - Quick to process and send
      - Matches WebSocket frame size
      - Efficient memory usage
-   
+
    - **Buffer (256KB)**:
      - Smooths out network irregularities
      - Handles brief connection issues
@@ -238,6 +250,7 @@ These choices create a balance between:
 ## Stream Recovery System
 
 ### Event Handling & Recovery
+
 1. **Stream Events**
    - **onStalled**:
      - Triggers when stream temporarily freezes
@@ -257,6 +270,7 @@ These choices create a balance between:
 2. **Exponential Backoff System**
    - Activates after complete connection loss
    - Progressive retry delays:
+
      ```javascript
      Attempt 1: 2 seconds  (2¹ * 1000ms)
      Attempt 2: 4 seconds  (2² * 1000ms)
@@ -264,6 +278,7 @@ These choices create a balance between:
      Attempt 4: 10 seconds (capped)
      Attempt 5: 10 seconds (capped)
      ```
+
    - Maximum 5 retry attempts
    - Maximum delay capped at 10 seconds
    - Formula: `Math.min(1000 * Math.pow(2, attemptNumber), 10000)`
@@ -296,6 +311,7 @@ This project uses several built-in Node.js modules that don't require npm instal
    - Built into Node.js core
    - Usage: `import { spawn } from 'child_process';`
    - How it works:
+
      ```javascript
      // spawn creates a new process in your system, similar to:
      // - Double-clicking FFmpeg.exe in Windows
@@ -310,6 +326,7 @@ This project uses several built-in Node.js modules that don't require npm instal
          // options...
      ]);
      ```
+
    - Important: The process runs outside Node.js in your actual system
    - Requires the program (FFmpeg) to be installed on your system
    - Must have proper system PATH configuration
@@ -331,12 +348,14 @@ This project uses several built-in Node.js modules that don't require npm instal
 
 Note: These modules are part of Node.js core functionality and do not need to be listed in package.json or installed via npm.
 
-# Browser Limitations vs Node.js Capabilities
+## Browser Limitations vs Node.js Capabilities
 
 ## Browser Sandbox Security
+
 Browsers operate in a strictly controlled sandbox environment for security reasons. This means:
 
-### What Browsers CANNOT Do:
+### What Browsers CANNOT Do
+
 1. **UDP Communication**
    - Cannot create direct UDP connections
    - Cannot connect directly to Tello drone (port 8889)
@@ -353,7 +372,8 @@ Browsers operate in a strictly controlled sandbox environment for security reaso
    - No low-level networking
    - Limited to HTTP(S) and WebSocket protocols
 
-### What Browsers CAN Do:
+### What Browsers CAN Do
+
 1. **Web APIs**
    - Make HTTP requests
    - Create WebSocket connections
@@ -367,9 +387,11 @@ Browsers operate in a strictly controlled sandbox environment for security reaso
    - Connect to known ports via WebSocket
 
 ## Node.js Server Capabilities
+
 Node.js runs outside the browser sandbox, allowing:
 
 1. **System Integration**
+
 ```javascript
 // Can spawn system processes
 import { spawn } from 'child_process';
@@ -379,7 +401,8 @@ const ffmpeg = spawn('ffmpeg', [options]);
 const notepad = spawn('notepad.exe');
 ```
 
-2. **Network Access**
+2.**Network Access**
+
 ```javascript
 // Can create UDP connections
 import dgram from 'dgram';
@@ -389,13 +412,15 @@ const droneClient = dgram.createSocket('udp4');
 droneClient.bind(11111);
 ```
 
-3. **Full System Access**
-   - Run external programs
-   - Access file system
-   - Modify system settings
-   - Handle raw network traffic
+3.**Full System Access**
+
+- Run external programs
+- Access file system
+- Modify system settings
+- Handle raw network traffic
 
 ## Why We Need Both
+
 Because of browser limitations, our architecture requires:
 
 1. **Node.js Server**
@@ -416,6 +441,7 @@ Because of browser limitations, our architecture requires:
    - Handles HTTP endpoints for drone commands
    - Serves static files
    - Completely independent from WebSocket server
+
    ```javascript
    const app = express();
    app.listen(3000);
@@ -425,6 +451,7 @@ Because of browser limitations, our architecture requires:
    - Dedicated server for video streaming
    - Runs independently on its own port
    - No HTTP server dependency
+
    ```javascript
    const wss = new WebSocketServer({ port: 3001 });
    ```
@@ -437,7 +464,8 @@ Because of browser limitations, our architecture requires:
    - Better error isolation
 
 4. **Communication Flow:**
-   ```
+
+   ```text
    Express Server (3000)     WebSocket Server (3001)
    │                         │
    ├─ Drone Commands         ├─ Video Streaming
@@ -446,14 +474,17 @@ Because of browser limitations, our architecture requires:
    ```
 
 ### Key Takeaway
+
 Our application uses independent Express and WebSocket servers, each handling its specific responsibilities. Express manages HTTP endpoints and static files, while WebSocket handles video streaming. This separation provides a clean, maintainable architecture while maintaining all functionality.
 
 ## Understanding Process Communication
 
 ### 1. Spawn and System Processes
+
 ```javascript
 const ffmpeg = spawn('ffmpeg', [...options]);
 ```
+
 - Creates a completely new process in the operating system
 - Runs independently from Node.js process
 - Visible in Task Manager/Activity Monitor
@@ -461,33 +492,41 @@ const ffmpeg = spawn('ffmpeg', [...options]);
 - Node.js can control this separate process
 
 ### 2. Network Interfaces (0.0.0.0)
+
 ```javascript
 '-i', `udp://0.0.0.0:${TELLO_VIDEO_PORT}`
 ```
+
 Your computer has multiple network interfaces:
+
 - WiFi (e.g., 192.168.1.5)
 - Ethernet (e.g., 192.168.1.10)
 - Localhost (127.0.0.1)
 
 When we use `0.0.0.0`:
+
 - Listens for incoming data on ALL interfaces
 - Captures drone video regardless of network connection type
 - Like having security cameras at every entrance
 - Ensures we don't miss the video feed
 
 ### 3. Process Communication through Pipes
-```
+
+```text
 FFmpeg Process                     Node.js Process
 [Video Processing] ==== PIPE ====> [Data Receiver]
 ```
 
 How pipes work:
+
 1. FFmpeg processes video and writes to pipe:
+
    ```javascript
    'pipe:1'  // FFmpeg's output goes to pipe
    ```
 
 2. Node.js reads from pipe:
+
    ```javascript
    ffmpeg.stdout.on('data', (data) => {
        // Receive data from FFmpeg through pipe
@@ -495,16 +534,19 @@ How pipes work:
    ```
 
 Think of it like a water pipe:
+
 - Room 1 (FFmpeg): Processes video and puts it in pipe
 - Pipe: Connects the two processes
 - Room 2 (Node.js): Takes video from pipe and sends to browsers
 
 Complete data flow:
-```
+
+```text
 Drone --UDP--> FFmpeg --PIPE--> Node.js --WebSocket--> Browser
 ```
 
 Each connection type serves a specific purpose:
+
 - UDP: Raw video from drone
 - Pipe: Inter-process communication
 - WebSocket: Browser streaming
@@ -512,6 +554,7 @@ Each connection type serves a specific purpose:
 ## Understanding FFmpeg Output Options
 
 ### FFmpeg Output Configuration
+
 ```javascript
 const ffmpeg = spawn('ffmpeg', [
     // ... input and processing options ...
@@ -530,6 +573,7 @@ const ffmpeg = spawn('ffmpeg', [
      - No temporary files needed
 
 2. **Alternative Output Options**:
+
    ```javascript
    // Save to file (no streaming)
    ffmpeg [...] output.mp4
@@ -548,6 +592,7 @@ const ffmpeg = spawn('ffmpeg', [
    - Direct communication with Node.js
 
 Without `pipe:1`, the video stream would break because:
+
 - FFmpeg wouldn't know where to send processed video
 - Node.js wouldn't receive any video data
 - WebSocket clients would get no stream
@@ -555,6 +600,7 @@ Without `pipe:1`, the video stream would break because:
 ## Understanding WebSocket Connection States
 
 ### WebSocket Client States
+
 ```javascript
 // In our video streaming code
 if (client.readyState === 1) {
@@ -567,17 +613,17 @@ if (client.readyState === 1) {
      - Initial state
      - Socket has been created
      - Connection is not yet established
-   
+
    - `1` (OPEN):
      - Connection is established and ready
      - Data can be sent and received
      - This is when we send video chunks
-   
+
    - `2` (CLOSING):
      - Connection is in the process of closing
      - Clean-up operations are happening
      - No new data should be sent
-   
+
    - `3` (CLOSED):
      - Connection is closed or couldn't be opened
      - No communication possible
@@ -590,6 +636,7 @@ if (client.readyState === 1) {
    - Improves error handling
 
 3. **State Management in Our Code**:
+
    ```javascript
    // Adding new client
    wss.on('connection', (ws) => {
@@ -616,6 +663,7 @@ if (client.readyState === 1) {
 ## Understanding JSMpeg and MPEGTS
 
 ### JSMpeg's Internal Architecture
+
 1. **Buffer Management**
    - Small internal buffers (512KB video, 128KB audio)
    - Discards old data to maintain low latency
@@ -623,6 +671,7 @@ if (client.readyState === 1) {
    - No timestamp-based synchronization
 
 2. **Streaming Behavior**
+
    ```javascript
    // JSMpeg prioritizes low latency:
    - Decodes data immediately upon receipt
@@ -638,10 +687,13 @@ if (client.readyState === 1) {
    - Maintains consistent performance
 
 ### MPEGTS (MPEG Transport Stream)
+
 1. **Packet Structure**
-   ```
+
+   ```text
    [Packet 1: 188 bytes][Packet 2: 188 bytes]...[Packet N: 188 bytes]
    ```
+
    - Each packet exactly 188 bytes
    - Fixed-size structure for reliability
    - Independent packet processing
@@ -661,10 +713,12 @@ if (client.readyState === 1) {
      - Built for unreliable networks
 
 3. **Chunking and MPEGTS**
+
    ```javascript
    // Our 4KB chunks naturally align with MPEGTS:
    4096 bytes ÷ 188 bytes = 21.78 packets
    ```
+
    - Complete packets: 21
    - Remaining bytes: 146
    - Next chunk starts with remainder
@@ -688,6 +742,7 @@ if (client.readyState === 1) {
 ### Global Variable vs Return Value Approach
 
 1. **Why We Use a Global Variable**
+
    ```javascript
    // Global variable approach (current implementation)
    let ffmpegProcess = null;  // Single source of truth
@@ -706,6 +761,7 @@ if (client.readyState === 1) {
 2. **Benefits of Global Variable**
    - Single source of truth for FFmpeg process state
    - Multiple restart points can access and modify:
+
      ```javascript
      // Error handler can restart
      ffmpeg.on('error', () => {
@@ -725,11 +781,13 @@ if (client.readyState === 1) {
          }
      });
      ```
+
    - Process state can be checked from anywhere
    - Simplifies auto-restart functionality
    - Cleaner state management across different event handlers
 
 3. **Why Not Use Return Value**
+
    ```javascript
    // Return value approach (would be problematic)
    function startFFmpeg() {
@@ -755,14 +813,17 @@ The global variable approach provides cleaner state management and better handle
 ## Understanding Buffer Sizes in Video Pipeline
 
 ### Three-Stage Buffering System
-```
+
+```text
 Drone → [FFmpeg UDP Buffer] → FFmpeg → [WebSocket Buffer] → Browser → [JSMpeg Buffer] → Display
 ```
 
 1. **FFmpeg Network Buffer (50MB)**
+
    ```javascript
    fifo_size=50000000  // 50MB UDP buffer
    ```
+
    - Large buffer for incoming UDP video packets
    - Handles network jitter and packet timing variations
    - Prevents packet loss during network fluctuations
@@ -770,11 +831,13 @@ Drone → [FFmpeg UDP Buffer] → FFmpeg → [WebSocket Buffer] → Browser → 
    - Acts as initial "shock absorber" for UDP stream
 
 2. **WebSocket Chunking Buffer**
+
    ```javascript
    const MPEGTS_PACKET_SIZE = 188;    // Each MPEG-TS packet
    const PACKETS_PER_CHUNK = 21;      // Number of packets per chunk
    const CHUNK_SIZE = 3948;           // 188 * 21 bytes
    ```
+
    - Accumulates FFmpeg output into optimal chunks
    - Aligns with MPEG-TS packet boundaries
    - Ensures efficient WebSocket transmission
@@ -782,9 +845,11 @@ Drone → [FFmpeg UDP Buffer] → FFmpeg → [WebSocket Buffer] → Browser → 
    - Maintains data integrity
 
 3. **JSMpeg Player Buffer (256KB)**
+
    ```javascript
    videoBufferSize: 256 * 1024  // 256KB video buffer
    ```
+
    - Small buffer for low-latency playback
    - Can hold ~66 chunks (256KB ÷ 3.948KB)
    - Drops old frames when full
@@ -812,15 +877,17 @@ Drone → [FFmpeg UDP Buffer] → FFmpeg → [WebSocket Buffer] → Browser → 
    - Real-time drone feedback
 
 This multi-stage buffering system creates a balance between:
+
 - Network reliability (50MB UDP buffer)
 - Transmission efficiency (3.948KB chunks)
 - Display latency (256KB playback buffer)
 
-# Tello Drone Web Controller
+## Tello Drone Web Controller
 
 ## Installation
 
 ### Stable Version (Recommended for Production)
+
 ```bash
 # Clone the stable release (v1.0.0)
 git clone -b v1.0.0 https://github.com/DDA1O1/drone_web.git
@@ -829,6 +896,7 @@ npm install
 ```
 
 ### Latest Version (Development)
+
 ```bash
 # Clone the latest code (may include unstable features)
 git clone https://github.com/DDA1O1/drone_web.git
@@ -841,13 +909,16 @@ npm install
 ## WebSocket Connection Management
 
 ### Client Connection Architecture
+
 ```javascript
 const clients = new Set();  // Stores active client connections
 let nextClientId = 0;      // Unique ID counter for clients
 ```
 
 ### Connection Lifecycle
+
 1. **New Connection**
+
    ```javascript
    wss.on('connection', (ws) => {
        ws.clientId = nextClientId++;  // Assign unique ID
@@ -859,6 +930,7 @@ let nextClientId = 0;      // Unique ID counter for clients
    - Automatic cleanup when client disconnects
    - Resource management for video streaming
    - FFmpeg process management
+
    ```javascript
    ws.on('close', () => {
        clients.delete(ws);  // Remove from active set
@@ -893,6 +965,7 @@ let nextClientId = 0;      // Unique ID counter for clients
    - Resource cleanup on errors
 
 This architecture ensures:
+
 - Reliable client tracking
 - Efficient resource usage
 - Clean connection closure

@@ -50,65 +50,43 @@ function App() {
           
           // Now initialize the actual player
           try {
-            playerRef.current = new JSMpeg.VideoElement(
-              videoRef.current,
-              url,
-              {
-                // Basic configuration
-                autoplay: true, // Automatically start the video stream
-                audio: false, //drone doesn't have audio
-                
-                // Performance optimizations
-                videoBufferSize: 256 * 1024,    // 256KB buffer for reduced latency
-                streaming: true, //// Optimize for live streaming
-                maxAudioLag: 0, // No audio lag
-                disableGl: false,               // Use WebGL for hardware acceleration
-                // Makes video decoding faster using GPU
-                progressive: true,              // Load and play frames as they arrive
-                // Don't wait for full buffer
-                chunkSize: 3948,               // Matches server's MPEGTS_PACKET_SIZE * PACKETS_PER_CHUNK (188 * 21)
-                decodeFirstFrame: true,         // Fast initial display
-                preserveDrawingBuffer: false,   // Don't keep old frames in memory
-                throttled: false,               // Real-time streaming
-
-                // Connection callbacks
-                onConnect: () => {
-                  console.log('WebSocket connected');
-                  setVideoConnected(true);
-                  reconnectAttemptsRef.current = 0;
-                  setError(null);
-                },
-                
-                // Video callbacks
-                onPlay: () => {
-                  console.log('Video started playing');
-                  setVideoConnected(true);
-                },
-
-                onDestroy: () => {
-                  console.log('Player destroyed');
-                  setVideoConnected(false);
-                },
-
-                onSourceEstablished: () => {
-                  console.log('Source established');
-                  setVideoConnected(true);
-                },
-
-                onSourceCompleted: () => {
-                  console.log('Source completed');
-                },
-
-                onSourceError: (err) => {
-                  console.error('Source error:', err);
-                  setVideoConnected(false);
-                  setError(`Video stream error: ${err}`);
-                }
+            playerRef.current = new JSMpeg(url, videoRef.current, {
+              // Performance optimizations
+              videoBufferSize: 256 * 1024,    // 256KB buffer for reduced latency
+              streaming: true,                 // Optimize for live streaming
+              maxAudioLag: 0,                 // No audio lag
+              disableWebAssembly: false,      // Use WebAssembly for better performance
+              progressive: true,              // Load and play frames as they arrive
+              chunkSize: 3948,               // Matches server's MPEGTS_PACKET_SIZE * PACKETS_PER_CHUNK
+              
+              // Callbacks
+              onPlay: () => {
+                console.log('Video started playing');
+                setVideoConnected(true);
+              },
+              onPause: () => {
+                console.log('Video paused');
+              },
+              onEnded: () => {
+                console.log('Video ended');
+                setVideoConnected(false);
+              },
+              onSourceEstablished: () => {
+                console.log('Source established');
+                setVideoConnected(true);
+                reconnectAttemptsRef.current = 0;
+                setError(null);
+              },
+              onSourceCompleted: () => {
+                console.log('Source completed');
+              },
+              onSourceError: (err) => {
+                console.error('Source error:', err);
+                setVideoConnected(false);
+                setError(`Video stream error: ${err}`);
               }
-            );
+            });
 
-            // Extract actual player instance
-            playerRef.current = playerRef.current.player;
             console.log('Video player initialized successfully');
             
           } catch (err) {
@@ -142,11 +120,8 @@ function App() {
         clearTimeout(reconnectTimeoutRef.current);
       }
       
-      // Cleanup video player and intervals
+      // Cleanup video player
       if (playerRef.current) {
-        if (playerRef.current.statsInterval) {
-          clearInterval(playerRef.current.statsInterval);
-        }
         playerRef.current.destroy();
         playerRef.current = null;
       }
