@@ -983,6 +983,7 @@ Drone → FFmpeg (MPEG-TS) → WebSocket → JSMpeg Player
 ```
 
 Key characteristics:
+
 - **Low Latency**: ~200-500ms delay
 - **Direct Streaming**: No segmentation or playlist files
 - **Continuous Flow**: Single unbroken stream
@@ -999,7 +1000,7 @@ Video → Segmenter → (.ts segments + .m3u8 playlist) → HTTP Server → Play
 
 While HLS is excellent for general video streaming, it's not ideal for drone control because:
 
-1. **Higher Latency**: 
+1. **Higher Latency**:
    - HLS requires multiple segments (typically 10 seconds each)
    - Players need to buffer several segments
    - Results in 10-30 seconds of latency
