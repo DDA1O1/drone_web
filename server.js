@@ -9,6 +9,44 @@ import fs from 'fs';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Unified error handling system
+const ErrorTypes = {
+    COMMAND: 'COMMAND_ERROR',
+    STREAM: 'STREAM_ERROR',
+    PROCESS: 'PROCESS_ERROR',
+    FILE: 'FILE_ERROR',
+    NETWORK: 'NETWORK_ERROR'
+};
+
+function handleError(type, error, res = null) {
+    // Log the error with context
+    console.error(`[${type}] ${error.message || error}`);
+    
+    // If response object exists, send appropriate error response
+    if (res) {
+        const statusCodes = {
+            [ErrorTypes.COMMAND]: 400,
+            [ErrorTypes.STREAM]: 503,
+            [ErrorTypes.PROCESS]: 500,
+            [ErrorTypes.FILE]: 500,
+            [ErrorTypes.NETWORK]: 503
+        };
+        
+        const messages = {
+            [ErrorTypes.COMMAND]: 'Failed to execute drone command',
+            [ErrorTypes.STREAM]: 'Video stream error',
+            [ErrorTypes.PROCESS]: 'Internal process error',
+            [ErrorTypes.FILE]: 'File operation failed',
+            [ErrorTypes.NETWORK]: 'Network communication error'
+        };
+        
+        res.status(statusCodes[type] || 500)
+           .send(messages[type] + ': ' + (error.message || error));
+    }
+    
+    return false;
+}
+
 // Create separate folders for different media types
 const createMediaFolders = () => {
     // First creates the main uploads folder
@@ -177,10 +215,8 @@ app.get('/drone/:command', (req, res) => {
         
         if (command === 'streamon') {
             droneClient.send(command, 0, command.length, TELLO_PORT, TELLO_IP, (err) => {
-                if (err) {
-                    console.error('Error sending streamon command:', err);
-                    return res.status(500).send('Error sending command');
-                }
+                if (err) return handleError(ErrorTypes.COMMAND, err, res);
+                
                 try {
                     // Start FFmpeg if not already running
                     if (!ffmpegProcess) {
@@ -189,44 +225,32 @@ app.get('/drone/:command', (req, res) => {
                     isStreamingActive = true;
                     res.send('Command sent');
                 } catch (error) {
-                    console.error('Error starting FFmpeg:', error);
-                    res.status(500).send('Error starting video stream');
+                    return handleError(ErrorTypes.PROCESS, 'Error starting video stream', res);
                 }
             });
         } else if (command === 'streamoff') {
             droneClient.send(command, 0, command.length, TELLO_PORT, TELLO_IP, (err) => {
-                if (err) {
-                    console.error('Error sending streamoff command:', err);
-                    return res.status(500).send('Error sending command');
-                }
+                if (err) return handleError(ErrorTypes.COMMAND, err, res);
                 
-                // Just set streaming flag to false instead of killing FFmpeg
                 isStreamingActive = false;
                 res.send('Stream paused');
             });
         } else if (command === 'command') {
             droneClient.send(command, 0, command.length, TELLO_PORT, TELLO_IP, (err) => {
-                if (err) {
-                    console.error('Error sending command:', err);
-                    return res.status(500).send('Error sending command');
-                }
-                // Start monitoring after SDK mode is initialized
+                if (err) return handleError(ErrorTypes.COMMAND, err, res);
+                
                 startDroneMonitoring();
                 res.send('Command sent');
             });
         } else {
             // Send other commands normally
             droneClient.send(command, 0, command.length, TELLO_PORT, TELLO_IP, (err) => {
-                if (err) {
-                    console.error('Error sending command:', err);
-                    return res.status(500).send('Error sending command');
-                }
+                if (err) return handleError(ErrorTypes.COMMAND, err, res);
                 res.send('Command sent');
             });
         }
     } catch (error) {
-        console.error('Error processing drone command:', error);
-        res.status(500).send('Error processing command');
+        return handleError(ErrorTypes.PROCESS, error, res);
     }
 });
 
@@ -382,7 +406,7 @@ function startFFmpeg() {
 // Modify photo capture endpoint
 app.post('/capture-photo', async (req, res) => {
     if (!ffmpegProcess) {
-        return res.status(400).send('Video stream not active');
+        return handleError(ErrorTypes.STREAM, 'Video stream not active', res);
     }
 
     try {
@@ -394,8 +418,7 @@ app.post('/capture-photo', async (req, res) => {
         try {
             await fs.promises.access(currentFramePath, fs.constants.F_OK);
         } catch (err) {
-            console.error('Current frame not available:', err);
-            return res.status(500).send('No frame available for capture');
+            return handleError(ErrorTypes.FILE, 'No frame available for capture', res);
         }
 
         // Check if current frame is being written to
@@ -417,18 +440,16 @@ app.post('/capture-photo', async (req, res) => {
                 }
                 throw new Error('Captured file is empty');
             } catch (err) {
-                console.warn(`Retry ${retries + 1}/${maxRetries}:`, err);
                 retries++;
                 if (retries >= maxRetries) {
-                    throw new Error('Failed to capture valid photo after multiple attempts');
+                    return handleError(ErrorTypes.FILE, 'Failed to capture valid photo after multiple attempts', res);
                 }
                 // Wait 100ms before next retry
                 await new Promise(resolve => setTimeout(resolve, 100));
             }
         }
     } catch (error) {
-        console.error('Error capturing photo:', error);
-        res.status(500).send(`Failed to capture photo: ${error.message}`);
+        return handleError(ErrorTypes.PROCESS, error, res);
     }
 });
 
