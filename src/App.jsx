@@ -123,12 +123,15 @@ function App() {
 
     try {
       const response = await fetch('/drone/command');
-      const success = response.ok;
+      const data = await response.json();
+      const success = data.status === 'connected';
+      
       if (success) {
         setDroneConnected(true);
         setError(null);
         retryAttemptsRef.current = 0;
       } else {
+        setError(`Drone connection failed: ${data.response}`);
         retryAttemptsRef.current++;
       }
       return success;

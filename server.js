@@ -182,7 +182,7 @@ droneClient.on('message', (msg) => {
 let lastCommand = '';
 
 // Add route for drone commands
-app.get('/drone/:command', (req, res) => {
+app.get('/drone/:command', async (req, res) => {
     try {
         const command = req.params.command;
         lastCommand = command;
@@ -219,15 +219,37 @@ app.get('/drone/:command', (req, res) => {
                 res.send('Stream paused');
             });
         } else if (command === 'command') {
+            // Create a Promise to wait for drone response
+            const responsePromise = new Promise((resolve) => {
+                // One-time message handler
+                const messageHandler = (msg) => {
+                    const response = msg.toString().trim();
+                    droneClient.removeListener('message', messageHandler);
+                    resolve(response);
+                };
+                droneClient.once('message', messageHandler);
+            });
+
+            // Send command
             droneClient.send(command, 0, command.length, TELLO_PORT, TELLO_IP, (err) => {
                 if (err) {
                     err.clientError = true;
                     return handleError(err, res);
                 }
-                
-                startDroneMonitoring();
-                res.send('Command sent');
             });
+
+            // Wait for response with 5 second timeout
+            const timeout = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Drone not responding')), 5000)
+            );
+
+            try {
+                const response = await Promise.race([responsePromise, timeout]);
+                startDroneMonitoring();
+                res.json({ status: response === 'ok' ? 'connected' : 'failed', response });
+            } catch (error) {
+                res.json({ status: 'failed', response: error.message });
+            }
         } else {
             // Send other commands normally
             droneClient.send(command, 0, command.length, TELLO_PORT, TELLO_IP, (err) => {
