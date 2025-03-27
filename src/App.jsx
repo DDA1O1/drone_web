@@ -21,7 +21,6 @@ function App() {
   const retryAttemptsRef = useRef(0);               // Track SDK mode entry attempts
   
   // Reconnection handling
-  const reconnectAttemptsRef = useRef(0);            // Counter for reconnection attempts
   const MAX_SDK_RETRY_ATTEMPTS = 2;                  // Maximum attempts to enter SDK mode
 
   // Add new states
@@ -56,7 +55,6 @@ function App() {
             play: () => {
               console.log('Video started playing');
               setVideoConnected(true);
-              setError(null);
             },
             pause: () => {
               console.log('Video paused');
@@ -69,8 +67,7 @@ function App() {
             load: () => {
               console.log('Source established');
               setVideoConnected(true);
-              reconnectAttemptsRef.current = 0;
-              setError(null);
+
             },
             error: (error) => {
               console.error('JSMpeg error:', error);
@@ -117,7 +114,6 @@ function App() {
         setError(null);
         
         // Reset attempt counters
-        reconnectAttemptsRef.current = 0;
         retryAttemptsRef.current = 0;
     };
   }, []);
@@ -254,8 +250,7 @@ function App() {
                 setRecordingFiles(files);
                 // Update recording status to true
                 setIsRecording(true);
-                // Clear any previous errors
-                setError(null);
+                
             } else {
                 // If server response wasn't ok, throw error
                 throw new Error('Failed to start recording');
