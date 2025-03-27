@@ -3,7 +3,7 @@ import { WebSocketServer } from 'ws';
 import { spawn } from 'child_process'; 
 import dgram from 'dgram'; 
 import { fileURLToPath } from 'url'; 
-import { dirname, join } from 'path'; 
+import { dirname, join, basename } from 'path'; 
 import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -414,12 +414,13 @@ function initializeMP4Process() {
     
     try {
         videoState.recording.process = spawn('ffmpeg', [
-            '-i', 'pipe:0',
-            '-c:v', 'copy',
-            '-c:a', 'copy',
-            '-bsf:a', 'aac_adtstoasc',
-            '-movflags', '+faststart',
-            '-y',
+            '-i', 'pipe:0',           // Input from pipe
+            '-c:v', 'libx264',        // Convert to H.264
+            '-preset', 'ultrafast',    // Fastest encoding
+            '-tune', 'zerolatency',    // Minimize latency
+            '-crf', '23',             // Balance quality/size
+            '-movflags', '+faststart', // Enable streaming
+            '-y',                      // Overwrite output
             videoState.recording.filePath
         ]);
 
@@ -472,7 +473,7 @@ app.post('/start-recording', (req, res) => {
         }
 
         videoState.recording.active = true;
-        res.json({ mp4FileName: path.basename(videoState.recording.filePath) });
+        res.json({ mp4FileName: basename(videoState.recording.filePath) });
         
     } catch (error) {
         return handleError(error, res);
