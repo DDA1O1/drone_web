@@ -172,7 +172,7 @@ app.get('/drone/:command', (req, res) => {
                 
                 try {
                     // Start FFmpeg if not already running
-                    if (!ffmpegProcess) {
+                    if (!videoState.stream.process) {
                         startFFmpeg();
                     }
                     res.send('Command sent');
@@ -188,9 +188,9 @@ app.get('/drone/:command', (req, res) => {
                 }
                 
                 // Kill the ffmpeg process if it exists
-                if (ffmpegProcess) {
-                    ffmpegProcess.kill();
-                    ffmpegProcess = null;
+                if (videoState.stream.process) {
+                    videoState.stream.process.kill();
+                    videoState.stream.process = null;
                 }
                 res.send('Stream paused');
             });
@@ -225,9 +225,9 @@ function startFFmpeg() {
     console.log('Starting FFmpeg process...');
     
     // Only start if no existing process
-    if (ffmpegProcess) {
+    if (videoState.stream.process) {
         console.log('FFmpeg process already running');
-        return ffmpegProcess;
+        return videoState.stream.process;
     }
 
     const ffmpeg = spawn('ffmpeg', [
@@ -248,7 +248,7 @@ function startFFmpeg() {
         join(photosDir, 'current_frame.jpg')
     ]);
 
-    ffmpegProcess = ffmpeg;
+    videoState.stream.process = ffmpeg;
 
     // Only log actual errors from stderr
     ffmpeg.stderr.on('data', (data) => {
@@ -265,8 +265,8 @@ function startFFmpeg() {
     // Handle process errors and exit
     ffmpeg.on('error', (error) => {
         handleError(new Error('FFmpeg process error: ' + error.message));
-        if (ffmpegProcess === ffmpeg) {
-            ffmpegProcess = null;
+        if (videoState.stream.process === ffmpeg) {
+            videoState.stream.process = null;
             if (lastCommand === 'streamon') {
                 setTimeout(startFFmpeg, 1000);
             }
@@ -277,8 +277,8 @@ function startFFmpeg() {
         if (code !== 0) {
             console.error(`FFmpeg process exited with code ${code}, signal: ${signal}`);
         }
-        if (ffmpegProcess === ffmpeg) {
-            ffmpegProcess = null;
+        if (videoState.stream.process === ffmpeg) {
+            videoState.stream.process = null;
             if (lastCommand === 'streamon') {
                 setTimeout(startFFmpeg, 1000);
             }
@@ -287,7 +287,7 @@ function startFFmpeg() {
 
     // Stream video data directly to WebSocket clients
     ffmpeg.stdout.on('data', (chunk) => {
-        if (!ffmpegProcess) return;
+        if (!videoState.stream.process) return;
 
         // Send to all connected WebSocket clients
         clients.forEach((client) => {
@@ -302,14 +302,14 @@ function startFFmpeg() {
         });
         
         // Send to MP4 recording if active
-        if (mp4Process?.stdin.writable) {
+        if (videoState.recording.process?.stdin.writable) {
             try {
-                mp4Process.stdin.write(chunk);
+                videoState.recording.process.stdin.write(chunk);
             } catch (error) {
                 console.error('Failed to write to MP4 stream:', error);
-                mp4Process.stdin.end();
-                mp4Process = null;
-                mp4FilePath = null;
+                videoState.recording.process.stdin.end();
+                videoState.recording.process = null;
+                videoState.recording.filePath = null;
             }
         }
     });
@@ -319,7 +319,7 @@ function startFFmpeg() {
 
 // Modify photo capture endpoint
 app.post('/capture-photo', async (req, res) => {
-    if (!ffmpegProcess) {
+    if (!videoState.stream.process) {
         return res.status(400).send('Video stream not active');
     }
 
@@ -340,36 +340,44 @@ app.post('/capture-photo', async (req, res) => {
     }
 });
 
-// Add global variable for mp4 process state
-let mp4Process = null;
-let mp4FilePath = null;
-let isRecording = false;
+// Replace separate process variables with a single state object
+const videoState = {
+    stream: {
+        active: false,
+        process: null
+    },
+    recording: {
+        active: false,
+        process: null,
+        filePath: null
+    }
+};
 
 // Function to initialize MP4 process
 function initializeMP4Process() {
     console.log('Starting MP4 process...');
     
-    if (mp4Process) {
+    if (videoState.recording.process) {
         console.log('MP4 process already running');
-        return mp4Process;
+        return videoState.recording.process;
     }
 
     const timestamp = Date.now();
     const mp4FileName = `video_${timestamp}.mp4`;
-    mp4FilePath = join(mp4Dir, mp4FileName);
+    videoState.recording.filePath = join(mp4Dir, mp4FileName);
     
     try {
-        mp4Process = spawn('ffmpeg', [
+        videoState.recording.process = spawn('ffmpeg', [
             '-i', 'pipe:0',
             '-c:v', 'copy',
             '-c:a', 'copy',
             '-bsf:a', 'aac_adtstoasc',
             '-movflags', '+faststart',
             '-y',
-            mp4FilePath
+            videoState.recording.filePath
         ]);
 
-        mp4Process.stderr.on('data', (data) => {
+        videoState.recording.process.stderr.on('data', (data) => {
             const message = data.toString().trim();
             if (message.toLowerCase().includes('error') || 
                 message.toLowerCase().includes('failed')) {
@@ -377,48 +385,48 @@ function initializeMP4Process() {
             }
         });
 
-        mp4Process.on('error', (err) => {
+        videoState.recording.process.on('error', (err) => {
             handleError(new Error('MP4 process error: ' + err.message));
-            mp4Process = null;
-            mp4FilePath = null;
+            videoState.recording.process = null;
+            videoState.recording.filePath = null;
         });
 
-        mp4Process.on('exit', (code, signal) => {
+        videoState.recording.process.on('exit', (code, signal) => {
             if (code !== 0) {
                 handleError(new Error(`MP4 process exited with code ${code}, signal: ${signal}`));
             }
-            mp4Process = null;
-            mp4FilePath = null;
+            videoState.recording.process = null;
+            videoState.recording.filePath = null;
         });
 
-        return mp4Process;
+        return videoState.recording.process;
     } catch (error) {
         handleError(new Error('Failed to initialize MP4 process: ' + error.message));
-        mp4Process = null;
-        mp4FilePath = null;
+        videoState.recording.process = null;
+        videoState.recording.filePath = null;
         return null;
     }
 }
 
 // Add route for saving video chunks
 app.post('/start-recording', (req, res) => {
-    if (isRecording) {
+    if (videoState.recording.active) {
         const error = new Error('Recording already in progress');
         error.clientError = true;
         return handleError(error, res);
     }
 
     try {
-        if (!mp4Process) {
+        if (!videoState.recording.process) {
             initializeMP4Process();
         }
 
-        if (!mp4Process || !mp4Process.stdin.writable) {
+        if (!videoState.recording.process || !videoState.recording.process.stdin.writable) {
             return handleError(new Error('Failed to initialize MP4 process'), res);
         }
 
-        isRecording = true;
-        res.json({ mp4FileName: path.basename(mp4FilePath) });
+        videoState.recording.active = true;
+        res.json({ mp4FileName: path.basename(videoState.recording.filePath) });
         
     } catch (error) {
         return handleError(error, res);
@@ -426,25 +434,25 @@ app.post('/start-recording', (req, res) => {
 });
 
 app.post('/stop-recording', async (req, res) => {
-    if (!isRecording) {
+    if (!videoState.recording.active) {
         const error = new Error('No active recording');
         error.clientError = true;
         return handleError(error, res);
     }
 
     try {
-        isRecording = false;
+        videoState.recording.active = false;
         
-        if (mp4Process) {
-            mp4Process.stdin.end();
+        if (videoState.recording.process) {
+            videoState.recording.process.stdin.end();
             
             await new Promise((resolve, reject) => {
                 const timeout = setTimeout(() => {
-                    mp4Process.kill('SIGKILL');
+                    videoState.recording.process.kill('SIGKILL');
                     reject(new Error('MP4 process termination timeout'));
                 }, 5000);
 
-                mp4Process.once('exit', (code, signal) => {
+                videoState.recording.process.once('exit', (code, signal) => {
                     clearTimeout(timeout);
                     if (code === 0 || signal === 'SIGKILL') {
                         resolve();
@@ -456,8 +464,8 @@ app.post('/stop-recording', async (req, res) => {
                 console.warn('MP4 process cleanup warning:', error.message);
             });
 
-            mp4Process = null;
-            mp4FilePath = null;
+            videoState.recording.process = null;
+            videoState.recording.filePath = null;
             console.log('MP4 recording stopped and cleaned up');
         }
         
@@ -466,11 +474,6 @@ app.post('/stop-recording', async (req, res) => {
         return handleError(error, res);
     }
 });
-
-// Global variable act as a single source of truth for FFmpeg process
-// This allows us to kill the old process before starting a new one multiple times before reaching the return statement
-// would not have been possible if we used the return statement from startFFmpeg
-let ffmpegProcess = null;
 
 // Add this improved graceful shutdown handler
 const gracefulShutdown = async () => {
@@ -508,17 +511,17 @@ const gracefulShutdown = async () => {
     droneClient.close();
 
     // 5. Kill FFmpeg processes
-    if (ffmpegProcess) {
-        ffmpegProcess.kill();
+    if (videoState.stream.process) {
+        videoState.stream.process.kill();
     }
-    if (mp4Process) {
-        mp4Process.stdin.end();
-        mp4Process.kill();
+    if (videoState.recording.process) {
+        videoState.recording.process.stdin.end();
+        videoState.recording.process.kill();
     }
 
     // 6. Close any open file streams
-    if (mp4Process) {
-        await new Promise(resolve => mp4Process.stdin.end(resolve));
+    if (videoState.recording.process) {
+        await new Promise(resolve => videoState.recording.process.stdin.end(resolve));
     }
 
     console.log('Graceful shutdown completed');
