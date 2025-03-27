@@ -226,7 +226,6 @@ function App() {
 
       const data = await response.json();
       console.log('Photo captured:', data.fileName);
-      setError(null);
     } catch (error) {
       console.error('Error capturing photo:', error);
       setError('Failed to capture photo: ' + error.message);
