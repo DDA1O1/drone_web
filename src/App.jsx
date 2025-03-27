@@ -60,6 +60,7 @@ function App() {
             },
             pause: () => {
               console.log('Video paused');
+              setVideoConnected(false);
             },
             stop: () => {
               console.log('Video stopped');
@@ -196,11 +197,9 @@ function App() {
                 if (command === 'streamoff') {
                     console.log('Pausing player');
                     playerRef.current.pause();
-                    setVideoConnected(false);
                 } else {
                     console.log('Resuming player');
                     playerRef.current.play();
-                    setVideoConnected(true);
                 }
             }
             setStreamEnabled(!streamEnabled);
