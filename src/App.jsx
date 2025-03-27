@@ -27,6 +27,15 @@ function App() {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingFiles, setRecordingFiles] = useState(null);
 
+  // Error handling utility
+  const handleOperationError = (operation, error, additionalActions = null) => {
+    console.error(`Error during ${operation}:`, error);
+    setError(`Failed to ${operation}: ${error.message}`);
+    if (additionalActions) {
+      additionalActions(error);
+    }
+  };
+
   /**
    * Initializes the JSMpeg video player with optimized settings
    * Handles connection, error states, and reconnection logic
@@ -36,7 +45,7 @@ function App() {
     
     try {
       const url = `ws://${window.location.hostname}:3001`;
-      playerRef.current = new JSMpeg.VideoElement(videoRef.current, url, {
+      const player = new JSMpeg.VideoElement(videoRef.current, url, {
         // Video dimensions
         videoWidth: 640,
         videoHeight: 480,
@@ -53,17 +62,13 @@ function App() {
           play: () => setVideoConnected(true),
           pause: () => setVideoConnected(false),
           stop: () => setVideoConnected(false),
-          error: (error) => {
-            console.error('JSMpeg error:', error);
-            setError('Failed to connect to video stream server');
-            setVideoConnected(false);
-          }
+          error: (error) => handleOperationError('connect to video stream', error)
         }
       });
       
+      playerRef.current = player.player;
     } catch (err) {
-      console.error('Player initialization error:', err);
-      setError(`Failed to initialize video: ${err.message}`);
+      handleOperationError('initialize video', err);
     }
   };
 
@@ -113,8 +118,9 @@ function App() {
       }
       return success;
     } catch (error) {
-      console.error('Failed to enter SDK mode:', error);
-      retryAttemptsRef.current++;
+      handleOperationError('enter SDK mode', error, () => {
+        retryAttemptsRef.current++;
+      });
       return false;
     }
   };
@@ -140,11 +146,10 @@ function App() {
       const data = await response.text();
       console.log('Command response:', data);
     } catch (error) {
-      console.error('Error sending command:', error);
-      setError(`Failed to send command: ${error.message}`);
-      // If command fails, attempt to re-enter SDK mode
-      setDroneConnected(false);
-      enterSDKMode();
+      handleOperationError(`send command: ${command}`, error, () => {
+        setDroneConnected(false);
+        enterSDKMode();
+      });
     }
   };
 
@@ -164,8 +169,7 @@ function App() {
         }
         setStreamEnabled(!streamEnabled);
     } catch (error) {
-        console.error('Error toggling video stream:', error);
-        setError(`Failed to ${command}: ${error.message}`);
+        handleOperationError(`${command} video stream`, error);
     }
   };
 
@@ -190,8 +194,7 @@ function App() {
       const data = await response.json();
       console.log('Photo captured:', data.fileName);
     } catch (error) {
-      console.error('Error capturing photo:', error);
-      setError('Failed to capture photo: ' + error.message);
+      handleOperationError('capture photo', error);
     }
   };
 
@@ -215,8 +218,7 @@ function App() {
         }
         setIsRecording(!isRecording);
     } catch (error) {
-        console.error('Error toggling recording:', error);
-        setError('Failed to toggle recording: ' + error.message);
+        handleOperationError(isRecording ? 'stop recording' : 'start recording', error);
     }
   };
 
