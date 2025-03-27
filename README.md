@@ -1180,3 +1180,163 @@ const ffmpeg = spawn('ffmpeg', [
    - Robust error handling and recovery
 
 This solution provides reliable photo capture while maintaining optimal performance for video streaming, effectively working around the limitations of browser-based capture methods.
+
+# WebSocket Connection Management Approaches
+
+## Local Drone Control Approach (Current Implementation)
+
+Our current implementation is optimized for local drone control over WiFi:
+
+```javascript
+// Simple WebSocket server setup
+const wss = new WebSocketServer({ 
+    port: streamPort,
+    clientTracking: true  // Basic client tracking
+});
+
+const clients = new Set(); // Store active clients
+let nextClientId = 0;     // Client ID counter
+
+wss.on('connection', (ws, req) => {
+    try {
+        // Simply assign ID and add to clients
+        ws.clientId = nextClientId++;
+        clients.add(ws);
+        
+        console.log(`New client ${ws.clientId} connected`);
+        console.log(`Total connected clients: ${clients.size}`);
+
+        // Basic disconnection handling
+        ws.on('close', () => {
+            console.log(`Client ${ws.clientId} disconnected`);
+            clients.delete(ws);
+            console.log(`Remaining clients: ${clients.size}`);
+        });
+
+        // Simple error handling
+        ws.on('error', (error) => {
+            console.error(`Client ${ws.clientId} error:`, error);
+            clients.delete(ws);
+        });
+    } catch (error) {
+        console.error('Error in WebSocket connection handler:', error);
+        ws.close(1011, 'Internal Server Error');
+    }
+});
+```
+
+### Key Features:
+- Simple connection management
+- Allows multiple browser tabs/windows
+- No IP-based restrictions
+- Minimal overhead
+- Quick connection/disconnection
+- Focused on local network performance
+
+### Ideal For:
+- Local drone control applications
+- Single machine accessing drone
+- Multiple browser tabs needed
+- Low-latency requirements
+- Direct WiFi connections
+- Development and testing
+
+## Enterprise/Cloud Approach (Alternative Implementation)
+
+The previous approach with IP tracking and heartbeat would be better for enterprise/cloud deployments:
+
+```javascript
+const wss = new WebSocketServer({ 
+    port: streamPort,
+    clientTracking: true,
+    handleProtocols: () => 'ws',
+    pingInterval: 30000,    // 30 second ping interval
+    pingTimeout: 5000      // 5 second timeout
+});
+
+wss.on('connection', (ws, req) => {
+    try {
+        // Check for duplicate IP connections
+        const existingClient = Array.from(clients).find(client => 
+            client._socket.remoteAddress === req.socket.remoteAddress
+        );
+
+        if (existingClient && existingClient.readyState === 1) {
+            ws.close(1013, 'Duplicate connection');
+            return;
+        }
+
+        ws.isAlive = true;
+        ws.on('pong', () => { ws.isAlive = true; });
+        
+        // Connection management code...
+    } catch (error) {
+        ws.close(1011, 'Internal Server Error');
+    }
+});
+
+// Heartbeat interval
+const heartbeat = setInterval(() => {
+    wss.clients.forEach(ws => {
+        if (!ws.isAlive) {
+            return ws.terminate();
+        }
+        ws.isAlive = false;
+        ws.ping();
+    });
+}, 30000);
+```
+
+### Key Features:
+- IP-based connection tracking
+- Heartbeat mechanism
+- Duplicate connection prevention
+- Connection health monitoring
+- Automatic stale connection cleanup
+- More robust error handling
+
+### Ideal For:
+- Cloud-based drone control systems
+- Multiple machines accessing drones
+- Enterprise deployments
+- Public-facing applications
+- High-security requirements
+- Production environments with multiple users
+
+## When to Use Each Approach
+
+### Use Local Approach (Current) When:
+- Running on localhost
+- Controlling drone directly via WiFi
+- Need multiple browser tabs
+- Developing/testing drone applications
+- Low latency is critical
+- Single user/machine setup
+
+### Use Enterprise Approach When:
+- Deploying to cloud servers
+- Managing multiple user connections
+- Need connection health monitoring
+- Security is a primary concern
+- Running in production environment
+- Handling connections from different IPs
+
+### Technical Considerations
+
+#### Local Approach Benefits:
+- Lower latency
+- Simpler implementation
+- Less network overhead
+- Better for development
+- Supports multiple tabs
+- Easier debugging
+
+#### Enterprise Approach Benefits:
+- Better security
+- Connection monitoring
+- Automatic cleanup
+- IP-based tracking
+- Production-ready
+- Multi-user support
+
+Choose the approach that best matches your deployment scenario and requirements. The local approach is optimized for drone control over WiFi, while the enterprise approach is better suited for cloud/production deployments.
