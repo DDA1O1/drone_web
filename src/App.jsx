@@ -199,7 +199,6 @@ function App() {
                 console.log('Cleaning up player');
                 playerRef.current.destroy();
                 playerRef.current = null;
-                setVideoConnected(false);
             } else if (command === 'streamon' && !playerRef.current) {
                 console.log('Initializing player');
                 initializePlayer();
