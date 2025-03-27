@@ -126,10 +126,12 @@ wss.on('connection', (ws, req) => {
 // Remove the complex monitoring system
 let droneState = {
     battery: null,
+    speed: null,
+    time: null,
     lastUpdate: null
 };
 
-// Simplified monitoring - just check battery every 10 seconds
+// Simplified monitoring - check battery, speed and time every 10 seconds
 function startDroneMonitoring() {
     if (monitoringInterval) {
         // Don't create multiple intervals
@@ -138,6 +140,8 @@ function startDroneMonitoring() {
     
     monitoringInterval = setInterval(() => {
         droneClient.send('battery?', 0, 8, TELLO_PORT, TELLO_IP);
+        droneClient.send('speed?', 0, 6, TELLO_PORT, TELLO_IP);
+        droneClient.send('time?', 0, 5, TELLO_PORT, TELLO_IP);
     }, 10000);
 }
 
@@ -152,25 +156,35 @@ function stopDroneMonitoring() {
 droneClient.on('message', (msg) => {
     try {
         const response = msg.toString().trim();
+        const now = Date.now();
         
-        // If it's a battery response (a number)
+        // Update state based on response
         if (!isNaN(response)) {
+            // Battery response (a number)
             droneState.battery = parseInt(response);
-            droneState.lastUpdate = Date.now();
-            
-            // Broadcast to all connected clients
-            const update = JSON.stringify({
-                type: 'battery',
-                value: droneState.battery,
-                timestamp: droneState.lastUpdate
-            });
-            
-            clients.forEach(client => {
-                if (client.readyState === 1) {
-                    client.send(update);
-                }
-            });
+            droneState.lastUpdate = now;
+        } else if (response.includes('cm/s')) {
+            // Speed response
+            droneState.speed = response;
+            droneState.lastUpdate = now;
+        } else if (response.includes('s')) {
+            // Time response
+            droneState.time = response;
+            droneState.lastUpdate = now;
         }
+        
+        // Broadcast to all connected clients
+        const update = JSON.stringify({
+            type: 'droneState',
+            value: droneState,
+            timestamp: now
+        });
+        
+        clients.forEach(client => {
+            if (client.readyState === 1) {
+                client.send(update);
+            }
+        });
         
         console.log('Drone response:', response);
     } catch (error) {
