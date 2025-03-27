@@ -32,64 +32,42 @@ function App() {
    * Handles connection, error states, and reconnection logic
    */
   const initializePlayer = () => {
-    console.log('Initialize player called');
-    if (videoRef.current && !playerRef.current) {
-      try {
-        const url = `ws://${window.location.hostname}:3001`;
-        console.log('Initializing JSMpeg player with URL:', url);
+    if (!videoRef.current || playerRef.current) return;
+    
+    try {
+      const url = `ws://${window.location.hostname}:3001`;
+      playerRef.current = new JSMpeg.VideoElement(videoRef.current, url, {
+        // Video dimensions
+        videoWidth: 640,
+        videoHeight: 480,
         
-        playerRef.current = new JSMpeg.VideoElement(videoRef.current, url, {
-          // Video dimensions
-          videoWidth: 640,
-          videoHeight: 480,
-          
-          // Performance optimizations
-          videoBufferSize: 1024 * 1024,
-          streaming: true,
-          autoplay: true,
-          decodeFirstFrame: true,
-          chunkSize: 3948,
-          
-          // Enhanced connection handling
-          hooks: {
-            play: () => {
-              console.log('Video started playing');
-              setVideoConnected(true);
-            },
-            pause: () => {
-              console.log('Video paused');
-              setVideoConnected(false);
-            },
-            stop: () => {
-              console.log('Video stopped');
-              setVideoConnected(false);
-            },
-            load: () => {
-              console.log('Source established');
-              setVideoConnected(true);
-
-            },
-            error: (error) => {
-              console.error('JSMpeg error:', error);
-              setError('Failed to connect to video stream server');
-              setVideoConnected(false);
-            }
+        // Performance optimizations
+        videoBufferSize: 1024 * 1024,
+        streaming: true,
+        autoplay: true,
+        decodeFirstFrame: true,
+        chunkSize: 3948,
+        
+        // Enhanced connection handling
+        hooks: {
+          play: () => setVideoConnected(true),
+          pause: () => setVideoConnected(false),
+          stop: () => setVideoConnected(false),
+          load: () => setVideoConnected(true),
+          error: (error) => {
+            console.error('JSMpeg error:', error);
+            setError('Failed to connect to video stream server');
+            setVideoConnected(false);
           }
-        });
-
-        // Store the player instance for API access
-        playerRef.current = playerRef.current.player;
-        console.log('Video player initialized successfully');
-        
-      } catch (err) {
-        console.error('Player initialization error:', err);
-        setError(`Failed to initialize video: ${err.message}`);
-      }
-    } else {
-      console.log('Initialize player conditions not met:', {
-        videoRefExists: !!videoRef.current,
-        playerRefExists: !!playerRef.current
+        }
       });
+
+      // Store the player instance for API access
+      playerRef.current = playerRef.current.player;
+      
+    } catch (err) {
+      console.error('Player initialization error:', err);
+      setError(`Failed to initialize video: ${err.message}`);
     }
   };
 
@@ -237,45 +215,22 @@ function App() {
    */
   const toggleRecording = async () => {
     try {
-        // Check if we're not currently recording
-        if (!isRecording) {
-            // Make POST request to start recording endpoint
-            const response = await fetch('/start-recording', { method: 'POST' });
-            
-            if (response.ok) {
-                // Get the filenames from server response
-                const files = await response.json();
-                // Save filenames in state for later reference
-                setRecordingFiles(files);
-                // Update recording status to true
-                setIsRecording(true);
-                
-            } else {
-                // If server response wasn't ok, throw error
-                throw new Error('Failed to start recording');
-            }
-        } else {
-            // We are currently recording, so stop it
-            const response = await fetch('/stop-recording', { method: 'POST' });
-            
-            if (response.ok) {
-                // Update recording status to false
-                setIsRecording(false);
-                // Log the saved files info
-                console.log('Recording saved:', recordingFiles);
-                // Clear the stored filenames
-                setRecordingFiles(null);
-                // Clear any previous errors
-                setError(null);
-            } else {
-                // If server response wasn't ok, throw error
-                throw new Error('Failed to stop recording');
-            }
+        const endpoint = isRecording ? '/stop-recording' : '/start-recording';
+        const response = await fetch(endpoint, { method: 'POST' });
+        
+        if (!response.ok) {
+            throw new Error(`Failed to ${isRecording ? 'stop' : 'start'} recording`);
         }
+        
+        if (!isRecording) {
+            const files = await response.json();
+            setRecordingFiles(files);
+        } else {
+            setRecordingFiles(null);
+        }
+        setIsRecording(!isRecording);
     } catch (error) {
-        // Handle any errors in the process
         console.error('Error toggling recording:', error);
-        // Show error to user
         setError('Failed to toggle recording: ' + error.message);
     }
   };
