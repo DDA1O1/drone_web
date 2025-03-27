@@ -39,87 +39,67 @@ function App() {
     if (videoRef.current && !playerRef.current) {
       try {
         const url = `ws://${window.location.hostname}:3001`;
-        console.log('Attempting WebSocket connection to:', url);
+        console.log('Initializing JSMpeg player with URL:', url);
         
-        // Test the WebSocket connection first
-        const testWs = new WebSocket(url);
-        
-        testWs.onopen = () => {
-          console.log('Test WebSocket connection successful');
-          testWs.close(); // Close test connection
+        playerRef.current = new JSMpeg.VideoElement(videoRef.current, url, {
+          // Video dimensions
+          videoWidth: 640,
+          videoHeight: 480,
           
-          // Now initialize the actual player
-          try {
-            playerRef.current = new JSMpeg.VideoElement(videoRef.current, url, {
-              // Video dimensions
-              videoWidth: 640,
-              videoHeight: 480,
-              
-              // Performance optimizations
-              videoBufferSize: 1024 * 1024,    // Increased buffer size for better frame handling
-              streaming: true,                 // Enable streaming mode
-              autoplay: true,                 // Start playing immediately
-              control: true,                  // Show video controls
-              loop: false,                    // Don't loop the video
-              decodeFirstFrame: true,         // Decode and display first frame
-              progressive: true,              // Load and play frames as they arrive
-              chunkSize: 3948,
-              maxAudioLag: 0,                // No audio, so disable audio lag compensation
-              disableGl: false,              // Enable WebGL when available
-              disableWebAssembly: false,     // Enable WebAssembly for better performance
-              preserveDrawingBuffer: true,    // Enable reliable canvas capture
-              canvas: null,                   // Let JSMpeg create its own canvas
-              
-              // WebGL specific options
-              webgl: {
-                preserveDrawingBuffer: true,  // Crucial for frame capture
-                antialias: false,            // Disable antialiasing for better performance
-                depth: false,                // Disable depth buffer as we don't need it
-                alpha: false,                // Disable alpha channel as we don't need it
-              },
-              
-              // Hook functions
-              hooks: {
-                  play: () => {
-                      console.log('Video started playing');
-                      setVideoConnected(true);
-                  },
-                  pause: () => {
-                      console.log('Video paused');
-                  },
-                  stop: () => {
-                      console.log('Video stopped');
-                      setVideoConnected(false);
-                  },
-                  load: () => {
-                      console.log('Source established');
-                      setVideoConnected(true);
-                      reconnectAttemptsRef.current = 0;
-                      setError(null);
-                  },
-                  drawFrame: (decoder, time) => {
-                      console.log('Frame rendered at time:', time, 'Decoder state:', {
-                          currentTime: decoder.currentTime,
-                          frameCount: decoder.frameCount
-                      });
-                  }
-              }
-            });
-
-            // Store the player instance for API access
-            playerRef.current = playerRef.current.player;
-            console.log('Video player initialized successfully');
-            
-          } catch (err) {
-            console.error('JSMpeg initialization error:', err);
-            setError(`Failed to initialize video player: ${err.message}`);
+          // Performance optimizations
+          videoBufferSize: 1024 * 1024,    // Increased buffer size for better frame handling
+          streaming: true,                 // Enable streaming mode
+          autoplay: true,                 // Start playing immediately
+          control: true,                  // Show video controls
+          loop: false,                    // Don't loop the video
+          decodeFirstFrame: true,         // Decode and display first frame
+          progressive: true,              // Load and play frames as they arrive
+          chunkSize: 3948,
+          maxAudioLag: 0,                // No audio, so disable audio lag compensation
+          disableGl: false,              // Enable WebGL when available
+          disableWebAssembly: false,     // Enable WebAssembly for better performance
+          preserveDrawingBuffer: true,    // Enable reliable canvas capture
+          canvas: null,                   // Let JSMpeg create its own canvas
+          
+          // WebGL specific options
+          webgl: {
+            preserveDrawingBuffer: true,  // Crucial for frame capture
+            antialias: false,            // Disable antialiasing for better performance
+            depth: false,                // Disable depth buffer as we don't need it
+            alpha: false,                // Disable alpha channel as we don't need it
+          },
+          
+          // Enhanced connection handling
+          hooks: {
+            play: () => {
+              console.log('Video started playing');
+              setVideoConnected(true);
+              setError(null);
+            },
+            pause: () => {
+              console.log('Video paused');
+            },
+            stop: () => {
+              console.log('Video stopped');
+              setVideoConnected(false);
+            },
+            load: () => {
+              console.log('Source established');
+              setVideoConnected(true);
+              reconnectAttemptsRef.current = 0;
+              setError(null);
+            },
+            error: (error) => {
+              console.error('JSMpeg error:', error);
+              setError('Failed to connect to video stream server');
+              setVideoConnected(false);
+            }
           }
-        };
-        
-        testWs.onerror = (error) => {
-          console.error('WebSocket connection failed:', error);
-          setError('Failed to connect to video stream server. Please check if the server is running.');
-        };
+        });
+
+        // Store the player instance for API access
+        playerRef.current = playerRef.current.player;
+        console.log('Video player initialized successfully');
         
       } catch (err) {
         console.error('Player initialization error:', err);
