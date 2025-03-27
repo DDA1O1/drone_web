@@ -162,6 +162,9 @@ function stopDroneMonitoring() {
     monitoringIntervals = [];
 }
 
+// Add a flag to track if streaming is active
+let isStreamingActive = false;
+
 // Add route for drone commands
 app.get('/drone/:command', (req, res) => {
     try {
@@ -175,7 +178,11 @@ app.get('/drone/:command', (req, res) => {
                     return res.status(500).send('Error sending command');
                 }
                 try {
-                    startFFmpeg();
+                    // Start FFmpeg if not already running
+                    if (!ffmpegProcess) {
+                        startFFmpeg();
+                    }
+                    isStreamingActive = true;
                     res.send('Command sent');
                 } catch (error) {
                     console.error('Error starting FFmpeg:', error);
@@ -183,55 +190,16 @@ app.get('/drone/:command', (req, res) => {
                 }
             });
         } else if (command === 'streamoff') {
-            try {
-                // Find the requesting client and only close that one
-                const requestingClient = Array.from(clients).find(client => 
-                    client.readyState === 1
-                );
-                if (requestingClient) {
-                    requestingClient.close();
+            droneClient.send(command, 0, command.length, TELLO_PORT, TELLO_IP, (err) => {
+                if (err) {
+                    console.error('Error sending streamoff command:', err);
+                    return res.status(500).send('Error sending command');
                 }
                 
-                // Only handle streamoff if no clients left
-                if (clients.size === 0) {
-                    // First send streamoff command to drone
-                    droneClient.send(command, 0, command.length, TELLO_PORT, TELLO_IP, (err) => {
-                        if (err) {
-                            console.error('Error sending streamoff command:', err);
-                            return res.status(500).send('Error sending command');
-                        }
-                        
-                        // Wait for drone acknowledgment before killing FFmpeg
-                        const timeout = setTimeout(() => {
-                            if (ffmpegProcess) {
-                                ffmpegProcess.kill();
-                                ffmpegProcess = null;
-                            }
-                            res.send('Stream stopped (timeout)');
-                        }, 1000); // Wait up to 1 second for acknowledgment
-
-                        // Listen for drone response
-                        const responseHandler = (msg) => {
-                            if (msg.toString().includes('ok')) {
-                                clearTimeout(timeout);
-                                if (ffmpegProcess) {
-                                    ffmpegProcess.kill();
-                                    ffmpegProcess = null;
-                                }
-                                droneClient.removeListener('message', responseHandler);
-                                res.send('Stream stopped successfully');
-                            }
-                        };
-
-                        droneClient.on('message', responseHandler);
-                    });
-                } else {
-                    res.send('Client disconnected but stream continues for other viewers');
-                }
-            } catch (error) {
-                console.error('Error handling streamoff:', error);
-                res.status(500).send('Error processing streamoff command');
-            }
+                // Just set streaming flag to false instead of killing FFmpeg
+                isStreamingActive = false;
+                res.send('Stream paused');
+            });
         } else if (command === 'command') {
             droneClient.send(command, 0, command.length, TELLO_PORT, TELLO_IP, (err) => {
                 if (err) {
@@ -339,6 +307,9 @@ function startFFmpeg() {
 
     ffmpeg.stdout.on('data', (data) => {
         try {
+            // Only process video data if streaming is active
+            if (!isStreamingActive) return;
+            
             // Combine new data with existing buffer
             streamBuffer = Buffer.concat([streamBuffer, data]);
             
