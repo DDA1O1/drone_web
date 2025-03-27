@@ -506,24 +506,24 @@ app.post('/start-recording', (req, res) => {
 });
 
 app.post('/stop-recording', (req, res) => {
-    if (mp4Process) {
-        try {
-            if (mp4Process && mp4Process.stdin.writable) {
-                mp4Process.on('close', (code) => {
-                    console.log(`MP4 process closed with code ${code}`);
-                    mp4Process = null;
-                });
-                
-                mp4Process.stdin.end();
-            }
+    if (!mp4Process) {
+        return res.status(400).send('No active recording');
+    }
+
+    try {
+        if (mp4Process.stdin.writable) {
+            mp4Process.on('close', (code) => {
+                console.log(`MP4 process closed with code ${code}`);
+                mp4Process = null;
+            });
             
-            res.send('Recording stopped');
-        } catch (err) {
-            console.error('Error stopping recording:', err);
-            res.status(500).send('Error stopping recording');
+            mp4Process.stdin.end();
         }
-    } else {
-        res.status(400).send('No active recording');
+        
+        res.send('Recording stopped');
+    } catch (err) {
+        console.error('Error stopping recording:', err);
+        res.status(500).send('Error stopping recording');
     }
 });
 
