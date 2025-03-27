@@ -29,25 +29,41 @@ function handleError(error, res = null) {
 
 // Create separate folders for different media types
 const createMediaFolders = () => {
-    // First creates the main uploads folder
-    const uploadsDir = join(__dirname, 'uploads');
-    
-    // Then creates two subfolders inside uploads:
-    const photosDir = join(uploadsDir, 'photos');        // for photos
-    const mp4Dir = join(uploadsDir, 'mp4_recordings');   // for .mp4 files
+    try {
+        // First creates the main uploads folder
+        const uploadsDir = join(__dirname, 'uploads');
+        
+        // Then creates two subfolders inside uploads:
+        const photosDir = join(uploadsDir, 'photos');        // for photos
+        const mp4Dir = join(uploadsDir, 'mp4_recordings');   // for .mp4 files
 
-    // Creates all folders if they don't exist
-    [uploadsDir, photosDir, mp4Dir].forEach(dir => {
-        if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, { recursive: true }); // recursive: true allows creating nested directories
-        }
-    });
+        // Creates all folders if they don't exist
+        [uploadsDir, photosDir, mp4Dir].forEach(dir => {
+            if (!fs.existsSync(dir)) {
+                fs.mkdirSync(dir, { recursive: true, mode: 0o755 }); // Add mode for proper permissions
+            }
+        });
 
-    return { uploadsDir, photosDir, mp4Dir };
+        // Test write permissions by trying to write and remove a test file
+        const testFile = join(photosDir, '.test');
+        fs.writeFileSync(testFile, '');
+        fs.unlinkSync(testFile);
+
+        return { uploadsDir, photosDir, mp4Dir };
+    } catch (error) {
+        console.error('Error creating media folders:', error);
+        throw error;
+    }
 };
 
-// Initialize folders
-const { photosDir, mp4Dir } = createMediaFolders();
+// Initialize folders with error handling
+let photosDir, mp4Dir;
+try {
+    ({ photosDir, mp4Dir } = createMediaFolders());
+} catch (error) {
+    console.error('Failed to create or verify media folders:', error);
+    process.exit(1);
+}
 
 // Initialize Express app
 const app = express();
@@ -239,20 +255,40 @@ function startFFmpeg() {
     }
 
     const ffmpeg = spawn('ffmpeg', [
-        '-hide_banner',
-        '-loglevel', 'warning',
+        '-hide_banner',           // Hide FFmpeg compilation info
+        '-loglevel', 'error',     // Only show errors in logs
+        '-y',                     // Force overwrite output files
+
+        // Input configuration
+        '-fflags', '+genpts',     // Generate presentation timestamps
         '-i', `udp://0.0.0.0:${TELLO_VIDEO_PORT}?overrun_nonfatal=1&fifo_size=50000000`,
-        '-c:v', 'mpeg1video',
-        '-b:v', '800k',
-        '-r', '30',
-        '-f', 'mpegts',
-        '-flush_packets', '1',
-        'pipe:1',
-        '-c:v', 'mjpeg',
-        '-q:v', '2',
-        '-vf', 'fps=2',
-        '-update', '1',
-        '-f', 'image2',
+
+        // First output: MPEG1 video for JSMpeg streaming
+        '-map', '0:v:0',         // Map video stream
+        '-c:v', 'mpeg1video',    // Use MPEG1 video codec (works well with JSMpeg)
+        '-b:v', '2000k',         // Increased base bitrate to 2 Mbps
+        '-maxrate', '4000k',     // Increased max bitrate to 4 Mbps
+        '-bufsize', '8000k',     // Doubled buffer size relative to maxrate
+        '-minrate', '1000k',     // Added minimum bitrate constraint
+        '-an',                   // Remove audio (drone has no audio)
+        '-f', 'mpegts',          // Output format: MPEG transport stream
+        '-s', '640x480',         // Video size: 640x480 pixels
+        '-r', '30',              // Frame rate: 30 fps
+        '-q:v', '5',             // Video quality (1-31, lower is better)
+        '-tune', 'zerolatency',  // Optimize for low latency
+        '-preset', 'ultrafast',  // Fastest encoding speed
+        '-pix_fmt', 'yuv420p',   // Pixel format: YUV420
+        '-flush_packets', '1',    // Flush packets immediately
+        '-reset_timestamps', '1', // Reset timestamps at the start
+        'pipe:1',                // Output to stdout for streaming
+
+        // Second output: JPEG frames for photo capture
+        '-map', '0:v:0',         // Map video stream again
+        '-c:v', 'mjpeg',         // JPEG codec for stills
+        '-q:v', '2',             // High quality for stills
+        '-vf', 'fps=2',          // 2 frames per second is enough for stills
+        '-update', '1',          // Update the same file
+        '-f', 'image2',          // Output format for stills
         join(photosDir, 'current_frame.jpg')
     ]);
 
@@ -262,9 +298,8 @@ function startFFmpeg() {
     ffmpeg.stderr.on('data', (data) => {
         const message = data.toString().trim();
         if (message && !message.includes('Last message repeated')) {
-            if (message.toLowerCase().includes('error') || 
-                message.toLowerCase().includes('failed') ||
-                message.toLowerCase().includes('unable to')) {
+            // Filter out the overwrite confirmation messages
+            if (!message.includes('already exists') && !message.includes('Overwrite?')) {
                 console.error('FFmpeg error:', message);
             }
         }

@@ -46,27 +46,45 @@ function App() {
     try {
       const url = `ws://${window.location.hostname}:3001`;
       const player = new JSMpeg.VideoElement(videoRef.current, url, {
-        // Video dimensions
+        // Video dimensions - match FFmpeg output
         videoWidth: 640,
         videoHeight: 480,
         
         // Performance optimizations
-        videoBufferSize: 1024 * 1024,
+        videoBufferSize: 512 * 1024,    // Increased for stability
         streaming: true,
         autoplay: true,
         decodeFirstFrame: true,
-        chunkSize: 3948,
+        chunkSize: 4096,                // Increased chunk size
+        disableGl: false,               // Enable WebGL if available
+        progressive: true,              // Enable progressive decoding
+        throttled: false,               // Don't throttle decoding
         
         // Simplified connection handling
         hooks: {
-          play: () => setVideoConnected(true),
+          play: () => {
+            console.log('Video playback started');
+            setVideoConnected(true);
+          },
           pause: () => setVideoConnected(false),
           stop: () => setVideoConnected(false),
-          error: (error) => handleOperationError('connect to video stream', error)
+          error: (error) => {
+            console.error('JSMpeg error:', error);
+            handleOperationError('connect to video stream', error);
+          }
         }
       });
       
       playerRef.current = player.player;
+
+      // Add error event listener to the WebSocket connection
+      if (player.player && player.player.source && player.player.source.socket) {
+        player.player.source.socket.addEventListener('error', (error) => {
+          console.error('WebSocket error:', error);
+          handleOperationError('WebSocket connection', error);
+        });
+      }
+
     } catch (err) {
       handleOperationError('initialize video', err);
     }
