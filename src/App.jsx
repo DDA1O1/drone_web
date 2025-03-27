@@ -48,12 +48,11 @@ function App() {
         decodeFirstFrame: true,
         chunkSize: 3948,
         
-        // Enhanced connection handling
+        // Simplified connection handling
         hooks: {
           play: () => setVideoConnected(true),
           pause: () => setVideoConnected(false),
           stop: () => setVideoConnected(false),
-          load: () => setVideoConnected(true),
           error: (error) => {
             console.error('JSMpeg error:', error);
             setError('Failed to connect to video stream server');
@@ -107,18 +106,20 @@ function App() {
 
     try {
       const response = await fetch('/drone/command');
-      if (response.ok) {
+      const success = response.ok;
+      if (success) {
         setDroneConnected(true);
         setError(null);
         retryAttemptsRef.current = 0;
-        return true;
+      } else {
+        retryAttemptsRef.current++;
       }
+      return success;
     } catch (error) {
       console.error('Failed to enter SDK mode:', error);
+      retryAttemptsRef.current++;
+      return false;
     }
-
-    retryAttemptsRef.current++;
-    return false;
   };
 
   // Handle video stream status changes
