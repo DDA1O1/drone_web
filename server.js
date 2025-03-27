@@ -350,12 +350,19 @@ function startFFmpeg() {
                         }
                     });
                     
-                    // Save to MP4 if recording
-                    if (mp4Process && mp4Process.stdin.writable) {
+                    // Only write to MP4 if we're actively recording and have a valid process
+                    if (isRecording && mp4Process && mp4Process.stdin.writable) {
                         try {
                             mp4Process.stdin.write(chunk);
                         } catch (error) {
                             console.error('Error writing to MP4 stream:', error);
+                            // If we encounter an error writing, stop the recording
+                            isRecording = false;
+                            if (mp4Process) {
+                                mp4Process.stdin.end();
+                                mp4Process = null;
+                                mp4FilePath = null;
+                            }
                         }
                     }
                 } catch (error) {
@@ -425,18 +432,24 @@ app.post('/capture-photo', async (req, res) => {
     }
 });
 
-// Add route for saving video chunks
+// Add global variable for mp4 process state
 let mp4Process = null;
+let mp4FilePath = null;
+let isRecording = false;
 
-app.post('/start-recording', (req, res) => {
-    // Check if recording is already in progress
+// Function to initialize MP4 process
+function initializeMP4Process() {
+    console.log('Starting MP4 process...');
+    
+    // Only start if no existing process
     if (mp4Process) {
-        return res.status(409).send('Recording already in progress');
+        console.log('MP4 process already running');
+        return mp4Process;
     }
 
     const timestamp = Date.now();
     const mp4FileName = `video_${timestamp}.mp4`;
-    const mp4FilePath = join(mp4Dir, mp4FileName);
+    mp4FilePath = join(mp4Dir, mp4FileName);
     
     try {
         // Set up the mp4 conversion process
@@ -458,44 +471,83 @@ app.post('/start-recording', (req, res) => {
         mp4Process.on('error', (err) => {
             console.error('FFmpeg MP4 error:', err);
             mp4Process = null;
-            res.status(500).send('Failed to start recording');
+            mp4FilePath = null;
         });
 
-        // Wait for process to be ready before responding
-        if (mp4Process && mp4Process.stdin.writable) {
-            res.json({ mp4FileName });
-        } else {
-            if (mp4Process) {
-                mp4Process.kill();
-                mp4Process = null;
+        mp4Process.on('exit', (code, signal) => {
+            if (code !== 0) {
+                console.error(`MP4 process exited with code ${code}, signal: ${signal}`);
             }
-            res.status(500).send('MP4 process failed to initialize');
+            mp4Process = null;
+            mp4FilePath = null;
+        });
+
+        return mp4Process;
+    } catch (error) {
+        console.error('Error initializing MP4 process:', error);
+        mp4Process = null;
+        mp4FilePath = null;
+        return null;
+    }
+}
+
+// Add route for saving video chunks
+app.post('/start-recording', (req, res) => {
+    // Check if recording is already in progress
+    if (isRecording) {
+        return res.status(409).send('Recording already in progress');
+    }
+
+    try {
+        // Initialize MP4 process if not already running
+        if (!mp4Process) {
+            initializeMP4Process();
         }
+
+        // Check if process initialized successfully
+        if (!mp4Process || !mp4Process.stdin.writable) {
+            throw new Error('Failed to initialize MP4 process');
+        }
+
+        // Set recording state to true
+        isRecording = true;
+
+        res.json({ mp4FileName: path.basename(mp4FilePath) });
         
     } catch (error) {
-        // Clean up if error occurs during setup
-        if (mp4Process) {
-            mp4Process.kill();
-            mp4Process = null;
-        }
         console.error('Error starting recording:', error);
         res.status(500).send('Failed to start recording');
     }
 });
 
 app.post('/stop-recording', (req, res) => {
-    if (!mp4Process) {
+    if (!isRecording) {
         return res.status(400).send('No active recording');
     }
 
     try {
-        if (mp4Process.stdin.writable) {
-            mp4Process.on('close', (code) => {
-                console.log(`MP4 process closed with code ${code}`);
-                mp4Process = null;
-            });
-            
+        // Set recording state to false first
+        isRecording = false;
+        
+        // Clean up the MP4 process
+        if (mp4Process) {
+            // End the input stream
             mp4Process.stdin.end();
+            
+            // Kill the process after a short delay to allow it to finish writing
+            setTimeout(() => {
+                if (mp4Process) {
+                    mp4Process.kill();
+                    console.log('MP4 process killed');
+                }
+            }, 1000); // Give it 1 second to finish writing
+            
+            // Clear references after process exits
+            mp4Process.on('exit', () => {
+                console.log('MP4 process cleaned up successfully');
+                mp4Process = null;
+                mp4FilePath = null;
+            });
         }
         
         res.send('Recording stopped');
@@ -550,6 +602,7 @@ const gracefulShutdown = async () => {
         ffmpegProcess.kill();
     }
     if (mp4Process) {
+        mp4Process.stdin.end();
         mp4Process.kill();
     }
 
