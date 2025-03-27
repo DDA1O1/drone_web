@@ -104,64 +104,58 @@ wss.on('connection', (ws, req) => {
     }
 });
 
-// Handle drone responses with error handling
+// Remove the complex monitoring system
+let droneState = {
+    battery: null,
+    lastUpdate: null
+};
+
+// Simplified monitoring - just check battery every 10 seconds
+function startDroneMonitoring() {
+    if (monitoringInterval) return;  // Don't create multiple intervals
+    
+    monitoringInterval = setInterval(() => {
+        droneClient.send('battery?', 0, 8, TELLO_PORT, TELLO_IP);
+    }, 10000);
+}
+
+function stopDroneMonitoring() {
+    clearInterval(monitoringInterval);
+    monitoringInterval = null;
+}
+
+// Update the message handler to store state
 droneClient.on('message', (msg) => {
     try {
-        const response = msg.toString();
+        const response = msg.toString().trim();
         
+        // If it's a battery response (a number)
         if (!isNaN(response)) {
-            const value = parseInt(response);
-            const messageType = lastCommand.replace('?', '');
+            droneState.battery = parseInt(response);
+            droneState.lastUpdate = Date.now();
+            
+            // Broadcast to all connected clients
+            const update = JSON.stringify({
+                type: 'battery',
+                value: droneState.battery,
+                timestamp: droneState.lastUpdate
+            });
             
             clients.forEach(client => {
                 if (client.readyState === 1) {
-                    try {
-                        client.send(JSON.stringify({
-                            type: messageType,
-                            value: value
-                        }));
-                    } catch (err) {
-                        handleError(new Error(`Failed to send ${messageType} to client ${client.clientId}`));
-                        clients.delete(client);
-                    }
+                    client.send(update);
                 }
             });
         }
         
         console.log('Drone response:', response);
     } catch (error) {
-        handleError(new Error('Error processing drone response: ' + error.message));
+        console.error('Error processing drone response:', error);
     }
 });
 
 // Track last command sent
 let lastCommand = '';
-
-// Track monitoring intervals
-let monitoringInterval = null;
-
-// Start periodic state monitoring
-function startDroneMonitoring() {
-    // Clear any existing interval first
-    stopDroneMonitoring();
-    
-    // Create a single interval that checks all metrics
-    monitoringInterval = setInterval(() => {
-        // Send all monitoring commands in sequence
-        const commands = ['battery?', 'time?', 'speed?'];
-        commands.forEach(cmd => {
-            droneClient.send(cmd, 0, cmd.length, TELLO_PORT, TELLO_IP);
-        });
-    }, 5000); // Check all metrics every 5 seconds
-}
-
-// Stop monitoring interval
-function stopDroneMonitoring() {
-    if (monitoringInterval) {
-        clearInterval(monitoringInterval);
-        monitoringInterval = null;
-    }
-}
 
 // Add route for drone commands
 app.get('/drone/:command', (req, res) => {
