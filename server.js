@@ -276,7 +276,7 @@ function startFFmpeg() {
 
     const ffmpeg = spawn('ffmpeg', [
         '-hide_banner',
-        '-loglevel', 'error',
+        '-loglevel', 'warning',  // Changed from 'error' to 'warning' to catch important messages
         
         // Input configuration with larger buffer
         '-i', `udp://0.0.0.0:${TELLO_VIDEO_PORT}?overrun_nonfatal=1&fifo_size=50000000`,
@@ -304,6 +304,38 @@ function startFFmpeg() {
     const MPEGTS_PACKET_SIZE = 188; // MPEG-TS packet size
     const PACKETS_PER_CHUNK = 21; // Send ~4KB (21 * 188 = 3948 bytes)
     const CHUNK_SIZE = MPEGTS_PACKET_SIZE * PACKETS_PER_CHUNK;
+
+    // Only log actual errors from stderr
+    ffmpeg.stderr.on('data', (data) => {
+        const message = data.toString().trim();
+        if (message && !message.includes('Last message repeated')) {
+            // Only log if it contains specific error keywords
+            if (message.toLowerCase().includes('error') || 
+                message.toLowerCase().includes('failed') ||
+                message.toLowerCase().includes('unable to')) {
+                console.error('FFmpeg Error:', message);
+            }
+        }
+    });
+
+    // Handle fatal errors
+    ffmpeg.on('error', (error) => {
+        console.error('FFmpeg fatal error:', error);
+        ffmpegProcess = null;
+        // Attempt to restart after a delay
+        setTimeout(startFFmpeg, 1000);
+    });
+
+    // Handle process exit
+    ffmpeg.on('exit', (code, signal) => {
+        if (code !== 0) {  // Only log non-zero exit codes (errors)
+            console.error(`FFmpeg process exited with code ${code}, signal: ${signal}`);
+            ffmpegProcess = null;
+            setTimeout(startFFmpeg, 1000);
+        } else {
+            console.log('FFmpeg process closed normally');
+        }
+    });
 
     ffmpeg.stdout.on('data', (data) => {
         try {
@@ -357,25 +389,6 @@ function startFFmpeg() {
             // Reset stream buffer on error
             streamBuffer = Buffer.alloc(0);
         }
-    });
-
-    ffmpeg.stderr.on('data', (data) => {
-        const message = data.toString();
-        if (!message.includes('Last message repeated')) {
-            console.log('FFmpeg:', message);
-        }
-    });
-
-    ffmpeg.on('error', (error) => {
-        console.error('FFmpeg process error:', error);
-        ffmpegProcess = null;
-        setTimeout(startFFmpeg, 1000);
-    });
-
-    ffmpeg.on('exit', (code, signal) => {
-        console.log(`FFmpeg process ${code ? 'exited with code ' + code : 'killed with signal ' + signal}`);
-        ffmpegProcess = null;
-        setTimeout(startFFmpeg, 1000);
     });
 
     return ffmpeg; // Return the FFmpeg instance
