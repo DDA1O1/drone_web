@@ -106,27 +106,32 @@ function App() {
 
   // ==== LIFE CYCLE MANAGEMENT ====
   useEffect(() => {
+    // Initialize player on component mount
+    if (!playerRef.current) {
+        initializePlayer();
+    }
+    
     return () => {
-      // Clear timeouts
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-      
-      // Cleanup video player
-      if (playerRef.current) {
-        playerRef.current.destroy();
-        playerRef.current = null;
-      }
-      
-      // Reset states
-      setVideoConnected(false);
-      setDroneConnected(false);
-      setStreamEnabled(false);
-      setError(null);
-      
-      // Reset attempt counters
-      reconnectAttemptsRef.current = 0;
-      retryAttemptsRef.current = 0;
+        // Clear timeouts
+        if (reconnectTimeoutRef.current) {
+            clearTimeout(reconnectTimeoutRef.current);
+        }
+        
+        // Only destroy player on component unmount
+        if (playerRef.current) {
+            playerRef.current.destroy();
+            playerRef.current = null;
+        }
+        
+        // Reset states
+        setVideoConnected(false);
+        setDroneConnected(false);
+        setStreamEnabled(false);
+        setError(null);
+        
+        // Reset attempt counters
+        reconnectAttemptsRef.current = 0;
+        retryAttemptsRef.current = 0;
     };
   }, []);
 
@@ -195,13 +200,22 @@ function App() {
         
         if (response.ok) {
             console.log('Command successful:', command);
-            if (command === 'streamoff' && playerRef.current) {
-                console.log('Cleaning up player');
-                playerRef.current.destroy();
-                playerRef.current = null;
-            } else if (command === 'streamon' && !playerRef.current) {
+            
+            // Initialize player if it doesn't exist
+            if (!playerRef.current && command === 'streamon') {
                 console.log('Initializing player');
                 initializePlayer();
+            } else if (playerRef.current) {
+                // Use player hooks to pause/resume instead of destroying
+                if (command === 'streamoff') {
+                    console.log('Pausing player');
+                    playerRef.current.pause();
+                    setVideoConnected(false);
+                } else {
+                    console.log('Resuming player');
+                    playerRef.current.play();
+                    setVideoConnected(true);
+                }
             }
             setStreamEnabled(!streamEnabled);
         }
