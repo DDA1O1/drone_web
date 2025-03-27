@@ -14,28 +14,31 @@ const createMediaFolders = () => {
     // First creates the main uploads folder
     const uploadsDir = join(__dirname, 'uploads');
     
-    // Then creates three subfolders inside uploads:
+    // Then creates two subfolders inside uploads:
     const photosDir = join(uploadsDir, 'photos');        // for photos
-    const tsDir = join(uploadsDir, 'ts_recordings');     // for .ts files
     const mp4Dir = join(uploadsDir, 'mp4_recordings');   // for .mp4 files
 
     // Creates all folders if they don't exist
-    [uploadsDir, photosDir, tsDir, mp4Dir].forEach(dir => {
+    [uploadsDir, photosDir, mp4Dir].forEach(dir => {
         if (!fs.existsSync(dir)) {
             fs.mkdirSync(dir, { recursive: true }); // recursive: true allows creating nested directories
         }
     });
 
-    return { uploadsDir, photosDir, tsDir, mp4Dir };
+    return { uploadsDir, photosDir, mp4Dir };
 };
 
 // Initialize folders
-const { photosDir, tsDir, mp4Dir } = createMediaFolders();
+const { photosDir, mp4Dir } = createMediaFolders();
 
 // Initialize Express app
 const app = express();
 const port = 3000;
 const streamPort = 3001;
+
+// Configure middleware for parsing JSON and form data
+app.use(express.json());  // Default ~100kb limit is sufficient
+app.use(express.urlencoded({ extended: true }));  // Default limit for form data
 
 // Tello drone configuration
 const TELLO_IP = '192.168.10.1';
@@ -255,153 +258,9 @@ app.get('/drone/:command', (req, res) => {
     }
 });
 
-// Define POST endpoint that handles photo saving
-// express.json() middleware parses incoming JSON requests
-app.post('/save-photo', express.json(), (req, res) => {
-    const { imageData } = req.body;
-    
-    // Input validation
-    if (!imageData) {
-        return res.status(400).send('No image data provided');
-    }
 
-    try {
-        // Remove header if exists
-        const base64Data = imageData.replace(/^data:image\/png;base64,/, "");
-        
-        // Generate filename with timestamp
-        const fileName = `photo_${Date.now()}.png`;
-        const filePath = join(photosDir, fileName);
-        
-        // Write file asynchronously with proper error handling
-        fs.writeFile(filePath, base64Data, 'base64', (err) => {
-            if (err) {
-                console.error('Error saving photo:', err);
-                return res.status(500).send('Error saving photo');
-            }
-            res.json({ fileName });
-        });
-    } catch (error) {
-        console.error('Error processing photo data:', error);
-        res.status(500).send('Error processing photo data');
-    }
-});
-
-// Add route for saving video chunks
-let recordingStream = null;
-let mp4Process = null;
-
-app.post('/start-recording', (req, res) => {
-    // Check if recording is already in progress
-    if (recordingStream || mp4Process) {
-        return res.status(409).send('Recording already in progress');
-    }
-
-    const timestamp = Date.now();
-    const tsFileName = `video_${timestamp}.ts`;
-    const mp4FileName = `video_${timestamp}.mp4`;
-    const tsFilePath = join(tsDir, tsFileName);
-    const mp4FilePath = join(mp4Dir, mp4FileName);
-    
-    try {
-        // Create write stream
-        recordingStream = fs.createWriteStream(tsFilePath);
-        
-        // Set up the mp4 conversion process
-        mp4Process = spawn('ffmpeg', [
-            '-i', 'pipe:0',
-            '-c:v', 'copy',
-            '-c:a', 'copy',
-            '-bsf:a', 'aac_adtstoasc',
-            '-movflags', '+faststart',
-            '-y',
-            mp4FilePath
-        ]);
-
-        // Add error handlers
-        mp4Process.stderr.on('data', (data) => {
-            console.log('FFmpeg MP4:', data.toString());
-        });
-
-        mp4Process.on('error', (err) => {
-            console.error('FFmpeg MP4 error:', err);
-        });
-
-        // Wait for streams to be ready before responding
-        recordingStream.on('open', () => {
-            if (mp4Process && mp4Process.stdin.writable) {
-                res.json({ tsFileName, mp4FileName });
-            } else {
-                cleanupAndRespond('MP4 process failed to initialize');
-            }
-        });
-        
-        recordingStream.on('error', (err) => {
-            cleanupAndRespond(`TS stream error: ${err.message}`);
-        });
-        
-        function cleanupAndRespond(errorMsg) {
-            if (recordingStream) recordingStream.end();
-            if (mp4Process && mp4Process.stdin.writable) mp4Process.stdin.end();
-            res.status(500).send(errorMsg || 'Failed to start recording');
-        }
-        
-    } catch (error) {
-        // Clean up if error occurs during setup
-        if (recordingStream) {
-            recordingStream.end();
-            recordingStream = null;
-        }
-        if (mp4Process) {
-            mp4Process.kill();
-            mp4Process = null;
-        }
-        console.error('Error starting recording:', error);
-        res.status(500).send('Failed to start recording');
-    }
-});
-
-app.post('/stop-recording', (req, res) => {
-    if (recordingStream || mp4Process) {
-        try {
-            if (recordingStream) {
-                // Attach handlers BEFORE ending the stream
-                recordingStream.on('finish', () => {
-                    recordingStream = null;
-                });
-                
-                recordingStream.on('error', (err) => {
-                    console.error('Error closing recording stream:', err);
-                    recordingStream = null;
-                });
-                
-                // End the stream after handlers are attached
-                recordingStream.end();
-            }
-            
-            if (mp4Process && mp4Process.stdin.writable) {
-                mp4Process.on('close', (code) => {
-                    console.log(`MP4 process closed with code ${code}`);
-                    mp4Process = null;
-                });
-                
-                mp4Process.stdin.end();
-            }
-            
-            res.send('Recording stopped');
-        } catch (err) {
-            console.error('Error stopping recording:', err);
-            res.status(500).send('Error stopping recording');
-        }
-    } else {
-        res.status(400).send('No active recording');
-    }
-});
-
-// Global variable act as a single source of truth for FFmpeg process
-// This allows us to kill the old process before starting a new one multiple times before reaching the return statement
-// would not have been possible if we used the return statement from startFFmpeg
-let ffmpegProcess = null;
+// Add global variable for photo capture
+let captureRequested = false;
 
 // Start FFmpeg process for video streaming
 function startFFmpeg() {
@@ -416,40 +275,30 @@ function startFFmpeg() {
     }
 
     const ffmpeg = spawn('ffmpeg', [
-        '-hide_banner',  // Hide FFmpeg compilation info
-        '-loglevel', 'error',  // Only show errors in logs
-
-        // Input configuration
+        '-hide_banner',
+        '-loglevel', 'error',
+        
+        // Input configuration with larger buffer
         '-i', `udp://0.0.0.0:${TELLO_VIDEO_PORT}?overrun_nonfatal=1&fifo_size=50000000`,
-        // - Listen on all interfaces (0.0.0.0)
-        // - Port 11111 (TELLO_VIDEO_PORT)
-        // - Don't crash on buffer overrun
-        // - Use 50MB buffer for network jitter
-
-        // Video codec settings
-        '-c:v', 'mpeg1video', // Use MPEG1 video codec (works well with JSMpeg)
-        '-b:v', '1000k',     // Video bitrate: 1 Mbps (better for 640x480@30fps)
-        '-maxrate', '1500k', // Allow 50% higher bitrate for peaks
-        '-bufsize', '4000k', // 4x target bitrate for stable encoding
-
-        '-an', // Remove audio (drone has no audio)
-
-        // Output format settings
-        '-f', 'mpegts',  // Output format: MPEG transport stream
-        '-s', '640x480', // Video size: 640x480 pixels
-        '-r', '30', // Frame rate: 30 frames per second
-        '-q:v', '5', // Video quality (1-31, lower is better)
-
-        // Performance optimizations
-        '-tune', 'zerolatency', // Optimize for low latency
-        '-preset', 'ultrafast', // Fastest encoding speed
-        '-pix_fmt', 'yuv420p', // Pixel format: YUV420 (widely compatible)
-        '-flush_packets', '1', // Flush packets immediately
-
-        'pipe:1' // Output to stdout (for streaming)
+        
+        // First output: Stream for JSMpeg
+        '-c:v', 'mpeg1video',      // Convert to mpeg1video for JSMpeg
+        '-b:v', '800k',            // Video bitrate
+        '-r', '30',                // Frame rate
+        '-f', 'mpegts',           // MPEG-TS format required by JSMpeg
+        '-flush_packets', '1',
+        'pipe:1',
+        
+        // Second output: High-quality JPEG frames
+        '-c:v', 'mjpeg',
+        '-q:v', '2',              // High quality (1-31, lower is better)
+        '-vf', 'fps=2',           // Limit frame updates (2 fps is enough for snapshots)
+        '-update', '1',           // Update the same file
+        '-f', 'image2',
+        join(photosDir, 'current_frame.jpg')
     ]);
 
-    ffmpegProcess = ffmpeg; // A global reference to track if FFmpeg is running
+    ffmpegProcess = ffmpeg;
 
     let streamBuffer = Buffer.alloc(0); // Buffer to store video data
     const MPEGTS_PACKET_SIZE = 188; // MPEG-TS packet size
@@ -489,17 +338,12 @@ function startFFmpeg() {
                         }
                     });
                     
-                    // Save to both formats if recording
-                    if (recordingStream) {
+                    // Save to MP4 if recording
+                    if (mp4Process && mp4Process.stdin.writable) {
                         try {
-                            // write to .ts file directly
-                            recordingStream.write(chunk);
-                            // write to Mp4 file using ffmpeg process
-                            if (mp4Process && mp4Process.stdin.writable) {
-                                mp4Process.stdin.write(chunk);
-                            }
+                            mp4Process.stdin.write(chunk);
                         } catch (error) {
-                            console.error('Error writing to recording streams:', error);
+                            console.error('Error writing to MP4 stream:', error);
                         }
                     }
                 } catch (error) {
@@ -536,6 +380,144 @@ function startFFmpeg() {
 
     return ffmpeg; // Return the FFmpeg instance
 }
+
+// Modify photo capture endpoint
+app.post('/capture-photo', async (req, res) => {
+    if (!ffmpegProcess) {
+        return res.status(400).send('Video stream not active');
+    }
+
+    try {
+        const timestamp = Date.now();
+        const finalPhotoPath = join(photosDir, `photo_${timestamp}.jpg`);
+        const currentFramePath = join(photosDir, 'current_frame.jpg');
+
+        // Check if current frame exists
+        try {
+            await fs.promises.access(currentFramePath, fs.constants.F_OK);
+        } catch (err) {
+            console.error('Current frame not available:', err);
+            return res.status(500).send('No frame available for capture');
+        }
+
+        // Check if current frame is being written to
+        const maxRetries = 3;
+        let retries = 0;
+        while (retries < maxRetries) {
+            try {
+                // Try to copy the file
+                await fs.promises.copyFile(currentFramePath, finalPhotoPath);
+                
+                // Verify the copied file exists and has size > 0
+                const stats = await fs.promises.stat(finalPhotoPath);
+                if (stats.size > 0) {
+                    return res.json({ 
+                        fileName: `photo_${timestamp}.jpg`,
+                        size: stats.size,
+                        timestamp: timestamp
+                    });
+                }
+                throw new Error('Captured file is empty');
+            } catch (err) {
+                console.warn(`Retry ${retries + 1}/${maxRetries}:`, err);
+                retries++;
+                if (retries >= maxRetries) {
+                    throw new Error('Failed to capture valid photo after multiple attempts');
+                }
+                // Wait 100ms before next retry
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+        }
+    } catch (error) {
+        console.error('Error capturing photo:', error);
+        res.status(500).send(`Failed to capture photo: ${error.message}`);
+    }
+});
+
+// Add route for saving video chunks
+let mp4Process = null;
+
+app.post('/start-recording', (req, res) => {
+    // Check if recording is already in progress
+    if (mp4Process) {
+        return res.status(409).send('Recording already in progress');
+    }
+
+    const timestamp = Date.now();
+    const mp4FileName = `video_${timestamp}.mp4`;
+    const mp4FilePath = join(mp4Dir, mp4FileName);
+    
+    try {
+        // Set up the mp4 conversion process
+        mp4Process = spawn('ffmpeg', [
+            '-i', 'pipe:0',
+            '-c:v', 'copy',
+            '-c:a', 'copy',
+            '-bsf:a', 'aac_adtstoasc',
+            '-movflags', '+faststart',
+            '-y',
+            mp4FilePath
+        ]);
+
+        // Add error handlers
+        mp4Process.stderr.on('data', (data) => {
+            console.log('FFmpeg MP4:', data.toString());
+        });
+
+        mp4Process.on('error', (err) => {
+            console.error('FFmpeg MP4 error:', err);
+            mp4Process = null;
+            res.status(500).send('Failed to start recording');
+        });
+
+        // Wait for process to be ready before responding
+        if (mp4Process && mp4Process.stdin.writable) {
+            res.json({ mp4FileName });
+        } else {
+            if (mp4Process) {
+                mp4Process.kill();
+                mp4Process = null;
+            }
+            res.status(500).send('MP4 process failed to initialize');
+        }
+        
+    } catch (error) {
+        // Clean up if error occurs during setup
+        if (mp4Process) {
+            mp4Process.kill();
+            mp4Process = null;
+        }
+        console.error('Error starting recording:', error);
+        res.status(500).send('Failed to start recording');
+    }
+});
+
+app.post('/stop-recording', (req, res) => {
+    if (mp4Process) {
+        try {
+            if (mp4Process && mp4Process.stdin.writable) {
+                mp4Process.on('close', (code) => {
+                    console.log(`MP4 process closed with code ${code}`);
+                    mp4Process = null;
+                });
+                
+                mp4Process.stdin.end();
+            }
+            
+            res.send('Recording stopped');
+        } catch (err) {
+            console.error('Error stopping recording:', err);
+            res.status(500).send('Error stopping recording');
+        }
+    } else {
+        res.status(400).send('No active recording');
+    }
+});
+
+// Global variable act as a single source of truth for FFmpeg process
+// This allows us to kill the old process before starting a new one multiple times before reaching the return statement
+// would not have been possible if we used the return statement from startFFmpeg
+let ffmpegProcess = null;
 
 // Add this improved graceful shutdown handler
 const gracefulShutdown = async () => {
@@ -581,8 +563,8 @@ const gracefulShutdown = async () => {
     }
 
     // 6. Close any open file streams
-    if (recordingStream) {
-        await new Promise(resolve => recordingStream.end(resolve));
+    if (mp4Process) {
+        await new Promise(resolve => mp4Process.stdin.end(resolve));
     }
 
     console.log('Graceful shutdown completed');
