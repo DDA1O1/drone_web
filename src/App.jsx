@@ -60,9 +60,6 @@ function App() {
           }
         }
       });
-
-      // Store the player instance for API access
-      playerRef.current = playerRef.current.player;
       
     } catch (err) {
       console.error('Player initialization error:', err);
