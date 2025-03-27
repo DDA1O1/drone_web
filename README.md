@@ -1181,7 +1181,81 @@ const ffmpeg = spawn('ffmpeg', [
 
 This solution provides reliable photo capture while maintaining optimal performance for video streaming, effectively working around the limitations of browser-based capture methods.
 
-# WebSocket Connection Management Approaches
+## Error Handling System
+
+### Centralized Error Handler
+
+Our application uses a centralized error handling utility called `handleOperationError` that provides consistent error handling across all operations:
+
+```javascript
+const handleOperationError = (operation, error, additionalActions = null) => {
+    console.error(`Error during ${operation}:`, error);
+    setError(`Failed to ${operation}: ${error.message}`);
+    if (additionalActions) {
+        additionalActions(error);
+    }
+};
+```
+
+### Real-World Usage Examples
+
+1. **Basic Error Handling**
+
+   ```javascript
+   try {
+       // Some operation
+   } catch (error) {
+       handleOperationError('capture photo', error);
+   }
+   ```
+
+2. **Error Handling with Recovery Actions**
+
+   ```javascript
+   // In sendCommand
+   try {
+       // Send drone command
+   } catch (error) {
+       handleOperationError(`send command: ${command}`, error, () => {
+           setDroneConnected(false);  // Additional action 1
+           enterSDKMode();            // Additional action 2
+       });
+   }
+   ```
+
+3. **Error Handling with Retry Logic**
+
+   ```javascript
+   // In enterSDKMode
+   try {
+       // Enter SDK mode
+   } catch (error) {
+       handleOperationError('enter SDK mode', error, () => {
+           retryAttemptsRef.current++;  // Increment retry counter
+       });
+   }
+   ```
+
+### Benefits
+
+1. **Consistency**: All errors are handled in the same format
+2. **DRY (Don't Repeat Yourself)**: Eliminates duplicate error handling code
+3. **Maintainability**: Changes to error handling can be made in one place
+4. **Flexibility**: The additional actions parameter allows for custom error handling
+5. **Better Error Tracking**: Single point of entry for all error handling
+
+### When to Use Additional Actions
+
+Additional actions are useful for:
+
+- Recovery attempts (retrying operations)
+- State cleanup (resetting flags or cleaning up resources)
+- Fallback behaviors (trying alternative methods)
+- Cascading error handling (where one error should trigger multiple recovery steps)
+
+This error handling system ensures consistent error reporting while allowing for flexible error recovery strategies across different operations.
+
+## WebSocket Connection Management Approaches
 
 ## Local Drone Control Approach (Current Implementation)
 
@@ -1225,7 +1299,8 @@ wss.on('connection', (ws, req) => {
 });
 ```
 
-### Key Features:
+### Key Features
+
 - Simple connection management
 - Allows multiple browser tabs/windows
 - No IP-based restrictions
@@ -1233,7 +1308,8 @@ wss.on('connection', (ws, req) => {
 - Quick connection/disconnection
 - Focused on local network performance
 
-### Ideal For:
+### Ideal For
+
 - Local drone control applications
 - Single machine accessing drone
 - Multiple browser tabs needed
@@ -1287,7 +1363,8 @@ const heartbeat = setInterval(() => {
 }, 30000);
 ```
 
-### Key Features:
+### Key Features
+
 - IP-based connection tracking
 - Heartbeat mechanism
 - Duplicate connection prevention
@@ -1295,7 +1372,8 @@ const heartbeat = setInterval(() => {
 - Automatic stale connection cleanup
 - More robust error handling
 
-### Ideal For:
+### Ideal For
+
 - Cloud-based drone control systems
 - Multiple machines accessing drones
 - Enterprise deployments
@@ -1305,7 +1383,8 @@ const heartbeat = setInterval(() => {
 
 ## When to Use Each Approach
 
-### Use Local Approach (Current) When:
+### Use Local Approach (Current) When
+
 - Running on localhost
 - Controlling drone directly via WiFi
 - Need multiple browser tabs
@@ -1313,7 +1392,8 @@ const heartbeat = setInterval(() => {
 - Low latency is critical
 - Single user/machine setup
 
-### Use Enterprise Approach When:
+### Use Enterprise Approach When
+
 - Deploying to cloud servers
 - Managing multiple user connections
 - Need connection health monitoring
@@ -1323,7 +1403,8 @@ const heartbeat = setInterval(() => {
 
 ### Technical Considerations
 
-#### Local Approach Benefits:
+#### Local Approach Benefits
+
 - Lower latency
 - Simpler implementation
 - Less network overhead
@@ -1331,7 +1412,8 @@ const heartbeat = setInterval(() => {
 - Supports multiple tabs
 - Easier debugging
 
-#### Enterprise Approach Benefits:
+#### Enterprise Approach Benefits
+
 - Better security
 - Connection monitoring
 - Automatic cleanup
