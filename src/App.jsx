@@ -241,16 +241,6 @@ function App() {
     }
   };
 
-  // Add cleanup effect for stream state changes
-  useEffect(() => {
-    return () => {
-        if (playerRef.current) {
-            playerRef.current.destroy();
-            playerRef.current = null;
-        }
-    };
-  }, [streamEnabled]); // Cleanup when stream state changes
-
   /**
    * Capture a photo from the video stream
    */
