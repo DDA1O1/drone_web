@@ -60,13 +60,6 @@ function App() {
           disableWebAssembly: false,
           canvas: null,
           
-          // WebGL specific options - simplified
-          webgl: {
-            antialias: false,            // Keep this for performance
-            depth: false,                // Keep this as we don't need depth
-            alpha: false,                // Keep this as we don't need transparency
-          },
-          
           // Enhanced connection handling
           hooks: {
             play: () => {
