@@ -51,35 +51,58 @@ function App() {
           // Now initialize the actual player
           try {
             playerRef.current = new JSMpeg.VideoElement(videoRef.current, url, {
+              // Video dimensions
+              videoWidth: 640,
+              videoHeight: 480,
+              
               // Performance optimizations
-              videoBufferSize: 256 * 1024,    // 256KB buffer for reduced latency
-              streaming: true,                 // Optimize for live streaming
+              videoBufferSize: 1024 * 1024,    // Increased buffer size for better frame handling
+              streaming: true,                 // Enable streaming mode
               autoplay: true,                 // Start playing immediately
               control: true,                  // Show video controls
               loop: false,                    // Don't loop the video
               decodeFirstFrame: true,         // Decode and display first frame
               progressive: true,              // Load and play frames as they arrive
-              chunkSize: 3948,               // Matches server's MPEGTS_PACKET_SIZE * PACKETS_PER_CHUNK
+              chunkSize: 3948,
+              maxAudioLag: 0,                // No audio, so disable audio lag compensation
+              disableGl: false,              // Enable WebGL when available
+              disableWebAssembly: false,     // Enable WebAssembly for better performance
+              preserveDrawingBuffer: true,    // Enable reliable canvas capture
+              canvas: null,                   // Let JSMpeg create its own canvas
+              
+              // WebGL specific options
+              webgl: {
+                preserveDrawingBuffer: true,  // Crucial for frame capture
+                antialias: false,            // Disable antialiasing for better performance
+                depth: false,                // Disable depth buffer as we don't need it
+                alpha: false,                // Disable alpha channel as we don't need it
+              },
               
               // Hook functions
               hooks: {
-                play: () => {
-                  console.log('Video started playing');
-                  setVideoConnected(true);
-                },
-                pause: () => {
-                  console.log('Video paused');
-                },
-                stop: () => {
-                  console.log('Video stopped');
-                  setVideoConnected(false);
-                },
-                load: () => {
-                  console.log('Source established');
-                  setVideoConnected(true);
-                  reconnectAttemptsRef.current = 0;
-                  setError(null);
-                }
+                  play: () => {
+                      console.log('Video started playing');
+                      setVideoConnected(true);
+                  },
+                  pause: () => {
+                      console.log('Video paused');
+                  },
+                  stop: () => {
+                      console.log('Video stopped');
+                      setVideoConnected(false);
+                  },
+                  load: () => {
+                      console.log('Source established');
+                      setVideoConnected(true);
+                      reconnectAttemptsRef.current = 0;
+                      setError(null);
+                  },
+                  drawFrame: (decoder, time) => {
+                      console.log('Frame rendered at time:', time, 'Decoder state:', {
+                          currentTime: decoder.currentTime,
+                          frameCount: decoder.frameCount
+                      });
+                  }
               }
             });
 
@@ -232,51 +255,26 @@ function App() {
    * Capture a photo from the video stream
    */
   const capturePhoto = async () => {
-    // First check: Ensure video container reference exists
-    if (!videoRef.current) return;
-    
+    if (!videoConnected) {
+      setError('Video stream not available');
+      return;
+    }
+
     try {
-        // Find the canvas element inside the video container
-        // JSMpeg creates this canvas automatically to display video
-        const canvas = videoRef.current.querySelector('canvas');
-        
-        // Second check: Ensure canvas was found
-        if (!canvas) {
-            console.error('No canvas element found');
-            return;
-        }
+      const response = await fetch('/capture-photo', {
+        method: 'POST'
+      });
 
-        // Convert the current frame on canvas to a base64 PNG image
-        // toDataURL() creates a data URL containing image representation
-        // Format: "data:image/png;base64,<actual-base64-data>"
-        const imageData = canvas.toDataURL('image/png');
-        
-        // Make POST request to server to save the image
-        const response = await fetch('/save-photo', {
-            method: 'POST',  // Using POST method
-            headers: {
-                'Content-Type': 'application/json'  // Tell server we're sending JSON
-            },
-            // Convert our data to JSON string
-            // imageData contains the base64 image string
-            body: JSON.stringify({ imageData })
-        });
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
 
-        // Check if server successfully saved the photo
-        if (response.ok) {
-            // Get the filename server used to save the image
-            const { fileName } = await response.json();
-            console.log('Photo saved:', fileName);
-            setError(null);  // Clear any previous errors
-        } else {
-            // If server response wasn't ok, throw error
-            throw new Error('Failed to save photo');
-        }
+      const data = await response.json();
+      console.log('Photo captured:', data.fileName);
+      setError(null);
     } catch (error) {
-        // Handle any errors that occurred during the process
-        console.error('Error capturing photo:', error);
-        // Show error to user
-        setError('Failed to capture photo: ' + error.message);
+      console.error('Error capturing photo:', error);
+      setError('Failed to capture photo: ' + error.message);
     }
   };
 
@@ -291,7 +289,7 @@ function App() {
             const response = await fetch('/start-recording', { method: 'POST' });
             
             if (response.ok) {
-                // Get the filenames (both .ts and .mp4) from server response
+                // Get the filenames from server response
                 const files = await response.json();
                 // Save filenames in state for later reference
                 setRecordingFiles(files);
@@ -370,7 +368,18 @@ function App() {
       
       {/* Video stream container */}
       <div className="video-container">
-        <div ref={videoRef}></div>
+        <div 
+          ref={videoRef} 
+          className="jsmpeg-player"
+          style={{
+            width: '640px',
+            height: '480px',
+            backgroundColor: '#000',
+            margin: '0 auto',
+            position: 'relative',
+            overflow: 'hidden'
+          }}
+        ></div>
       </div>
 
       {/* Add media controls after video container */}
@@ -391,7 +400,7 @@ function App() {
         </button>
         {isRecording && (
           <span className="recording-info">
-            Recording in progress... (Will save as both MP4 and TS)
+            Recording in progress... (Saving as MP4)
           </span>
         )}
       </div>
