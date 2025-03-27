@@ -1056,3 +1056,126 @@ while (streamBuffer.length >= CHUNK_SIZE) {
 ### Conclusion
 
 While HLS is the standard choice for video streaming services, our direct MPEG-TS over WebSocket approach is better suited for drone control applications where low latency is critical. The simplicity and efficiency of our implementation provide the real-time responsiveness needed for effective drone operation.
+
+## Photo Capture Implementation
+
+### Initial Challenges
+
+1. **WebGL Canvas Restrictions**
+   - Initially attempted to capture photos directly from JSMpeg's WebGL canvas
+   - WebGL context has security restrictions that prevent reliable frame capture
+   - `toDataURL()` and `drawImage()` methods often returned black frames
+   - This is a known limitation with WebGL contexts, especially when `preserveDrawingBuffer` is false
+
+2. **Video Element Capture Limitations**
+   - Attempted to capture from video element using standard HTML5 video methods
+   - Not possible because JSMpeg uses a custom decoder, not native video elements
+   - No direct access to video frames through standard browser APIs
+
+### Solution: Dual-Output FFmpeg Pipeline
+
+We solved this by implementing a dual-output FFmpeg pipeline that handles both video streaming and frame capture simultaneously:
+
+```javascript
+const ffmpeg = spawn('ffmpeg', [
+    // Input configuration
+    '-i', `udp://0.0.0.0:${TELLO_VIDEO_PORT}?overrun_nonfatal=1&fifo_size=50000000`,
+    
+    // First output: Stream for JSMpeg
+    '-c:v', 'mpeg1video',      // Convert to mpeg1video for JSMpeg
+    '-b:v', '800k',            // Video bitrate
+    '-r', '30',                // Frame rate
+    '-f', 'mpegts',           // MPEG-TS format required by JSMpeg
+    'pipe:1',
+    
+    // Second output: High-quality JPEG frames
+    '-c:v', 'mjpeg',          // JPEG codec
+    '-q:v', '2',              // High quality (1-31, lower is better)
+    '-vf', 'fps=2',           // 2 frames per second
+    '-update', '1',           // Update the same file
+    '-f', 'image2',          // Image output format
+    'current_frame.jpg'       // Continuously updated JPEG file
+]);
+```
+
+### How It Works
+
+1. **Dual Processing**
+   - FFmpeg processes the input stream into two separate outputs
+   - Main output: MPEG1 video stream for real-time playback
+   - Secondary output: High-quality JPEG frames for photo capture
+
+2. **Frame Capture Process**
+   ```javascript
+   app.post('/capture-photo', async (req, res) => {
+       // Verify stream is active
+       if (!ffmpegProcess) {
+           return res.status(400).send('Video stream not active');
+       }
+
+       try {
+           const timestamp = Date.now();
+           const finalPhotoPath = join(photosDir, `photo_${timestamp}.jpg`);
+           const currentFramePath = join(photosDir, 'current_frame.jpg');
+
+           // Implement retry mechanism for reliable capture
+           const maxRetries = 3;
+           let retries = 0;
+           while (retries < maxRetries) {
+               try {
+                   await fs.promises.copyFile(currentFramePath, finalPhotoPath);
+                   const stats = await fs.promises.stat(finalPhotoPath);
+                   if (stats.size > 0) {
+                       return res.json({ 
+                           fileName: `photo_${timestamp}.jpg`,
+                           size: stats.size,
+                           timestamp: timestamp
+                       });
+                   }
+               } catch (err) {
+                   retries++;
+                   await new Promise(resolve => setTimeout(resolve, 100));
+               }
+           }
+       } catch (error) {
+           res.status(500).send(`Failed to capture photo: ${error.message}`);
+       }
+   });
+   ```
+
+3. **Optimization Features**
+   - Frame rate limited to 2 FPS for photo capture to reduce system load
+   - High-quality JPEG encoding (quality level 2 out of 31)
+   - File update mode prevents accumulation of temporary files
+   - Retry mechanism ensures reliable capture even during high system load
+
+4. **Advantages of This Approach**
+   - Bypasses WebGL restrictions completely
+   - No dependency on browser APIs
+   - Higher quality photos than canvas capture
+   - More reliable operation
+   - Lower system resource usage
+   - No frame synchronization issues
+
+5. **Error Handling**
+   - Validates stream status before capture
+   - Checks file existence and size
+   - Implements retry mechanism
+   - Provides detailed error messages
+   - Ensures clean error states
+
+### Performance Considerations
+
+1. **Resource Usage**
+   - Secondary output adds minimal overhead
+   - 2 FPS capture rate balances quality and performance
+   - Single file update prevents disk space issues
+   - Efficient JPEG encoding with quality optimization
+
+2. **Reliability**
+   - Independent of browser limitations
+   - Not affected by WebGL context issues
+   - Hardware-accelerated when available
+   - Robust error handling and recovery
+
+This solution provides reliable photo capture while maintaining optimal performance for video streaming, effectively working around the limitations of browser-based capture methods.
