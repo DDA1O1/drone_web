@@ -156,29 +156,16 @@ function App() {
    */
   const toggleVideoStream = async () => {
     const command = streamEnabled ? 'streamoff' : 'streamon';
-    console.log('Attempting to', command);
     try {
         const response = await fetch(`/drone/${command}`);
+        if (!response.ok) throw new Error(`Failed to ${command}`);
         
-        if (response.ok) {
-            console.log('Command successful:', command);
-            
-            // Initialize player if it doesn't exist
-            if (!playerRef.current && command === 'streamon') {
-                console.log('Initializing player');
-                initializePlayer();
-            } else if (playerRef.current) {
-                // Use player hooks to pause/resume instead of destroying
-                if (command === 'streamoff') {
-                    console.log('Pausing player');
-                    playerRef.current.pause();
-                } else {
-                    console.log('Resuming player');
-                    playerRef.current.play();
-                }
-            }
-            setStreamEnabled(!streamEnabled);
+        if (command === 'streamon' && !playerRef.current) {
+            initializePlayer();
+        } else if (playerRef.current) {
+            playerRef.current[command === 'streamoff' ? 'pause' : 'play']();
         }
+        setStreamEnabled(!streamEnabled);
     } catch (error) {
         console.error('Error toggling video stream:', error);
         setError(`Failed to ${command}: ${error.message}`);
