@@ -48,15 +48,8 @@ function App() {
           videoBufferSize: 1024 * 1024,
           streaming: true,
           autoplay: true,
-          control: true,
-          loop: false,
           decodeFirstFrame: true,
-          progressive: true,
           chunkSize: 3948,
-          maxAudioLag: 0,
-          disableGl: false,
-          disableWebAssembly: false,
-          canvas: null,
           
           // Enhanced connection handling
           hooks: {
