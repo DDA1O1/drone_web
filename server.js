@@ -48,17 +48,16 @@ const TELLO_VIDEO_PORT = 11111;
 // Create UDP client for drone commands
 const droneClient = dgram.createSocket('udp4');
 
-// Create WebSocket server with explicit error handling
+// Create WebSocket server
 const wss = new WebSocketServer({ 
     port: streamPort,
-    clientTracking: true, // Enable client tracking
-    handleProtocols: () => 'ws' // Force ws protocol
+    clientTracking: true  // Enable basic client tracking
 });
 
-const clients = new Set(); // Set only stores unique values
-let nextClientId = 0;  // Add client ID counter
+const clients = new Set(); // Set to store active clients
+let nextClientId = 0;     // Counter for client IDs
 
-// Add proper WebSocket server event handlers
+// Add WebSocket server event handlers
 wss.on('listening', () => {
     console.log(`WebSocket server is listening on port ${streamPort}`);
 });
@@ -69,19 +68,24 @@ wss.on('error', (error) => {
 
 wss.on('connection', (ws, req) => {
     try {
+        // Assign client ID and add to tracked clients
         ws.clientId = nextClientId++;
         clients.add(ws);
-        console.log(`Client ${ws.clientId} connected from ${req.socket.remoteAddress}`);
+        
+        console.log(`New client ${ws.clientId} connected`);
         console.log(`Total connected clients: ${clients.size}`);
 
-        ws.on('error', (error) => {
-            console.error(`Client ${ws.clientId} error:`, error);
-        });
-
-        ws.on('close', (code, reason) => {
-            console.log(`Client ${ws.clientId} disconnected. Code: ${code}, Reason: ${reason}`);
+        // Handle disconnection
+        ws.on('close', () => {
+            console.log(`Client ${ws.clientId} disconnected`);
             clients.delete(ws);
             console.log(`Remaining clients: ${clients.size}`);
+        });
+
+        // Handle errors
+        ws.on('error', (error) => {
+            console.error(`Client ${ws.clientId} error:`, error);
+            clients.delete(ws);
         });
 
     } catch (error) {
@@ -233,13 +237,11 @@ let captureRequested = false;
 // Start FFmpeg process for video streaming
 function startFFmpeg() {
     console.log('Starting FFmpeg process...');
+    
+    // Only start if no existing process
     if (ffmpegProcess) {
-        console.log('Killing existing FFmpeg process...');
-        try {
-            ffmpegProcess.kill();
-        } catch (err) {
-            console.error('Error killing existing FFmpeg process:', err);
-        }
+        console.log('FFmpeg process already running');
+        return ffmpegProcess;
     }
 
     const ffmpeg = spawn('ffmpeg', [
@@ -286,22 +288,36 @@ function startFFmpeg() {
         }
     });
 
-    // Handle fatal errors
+    // Handle fatal errors with recovery
     ffmpeg.on('error', (error) => {
         console.error('FFmpeg fatal error:', error);
-        ffmpegProcess = null;
-        // Attempt to restart after a delay
-        setTimeout(startFFmpeg, 1000);
+        // Only clear the reference if the process actually died
+        if (ffmpegProcess === ffmpeg) {
+            ffmpegProcess = null;
+        }
+        // Attempt to restart after a delay if streaming is still active
+        if (isStreamingActive) {
+            setTimeout(startFFmpeg, 1000);
+        }
     });
 
-    // Handle process exit
+    // Handle process exit with recovery
     ffmpeg.on('exit', (code, signal) => {
         if (code !== 0) {  // Only log non-zero exit codes (errors)
             console.error(`FFmpeg process exited with code ${code}, signal: ${signal}`);
-            ffmpegProcess = null;
-            setTimeout(startFFmpeg, 1000);
+            // Only clear the reference if the process actually died
+            if (ffmpegProcess === ffmpeg) {
+                ffmpegProcess = null;
+            }
+            // Attempt to restart after a delay if streaming is still active
+            if (isStreamingActive) {
+                setTimeout(startFFmpeg, 1000);
+            }
         } else {
             console.log('FFmpeg process closed normally');
+            if (ffmpegProcess === ffmpeg) {
+                ffmpegProcess = null;
+            }
         }
     });
 
@@ -319,24 +335,17 @@ function startFFmpeg() {
                     // Take complete packets
                     const chunk = streamBuffer.subarray(0, CHUNK_SIZE);
                     
-                    // Keep remaining bytes (safer approach)
-                    streamBuffer = streamBuffer.subarray(Math.min(CHUNK_SIZE, streamBuffer.length));
+                    // Keep remaining bytes
+                    streamBuffer = streamBuffer.subarray(CHUNK_SIZE);
                     
                     // Send to each connected client
                     clients.forEach((client) => {
-                        // Check if client connection is OPEN (readyState 1)
                         if (client.readyState === 1) {
                             try {
-                                // Send 4KB chunk as binary data
                                 client.send(chunk, { binary: true });
                             } catch (err) {
                                 console.error(`Error sending chunk to client ${client.clientId}:`, err);
-                                // Close problematic client connection
-                                try {
-                                    client.close();
-                                } catch (closeErr) {
-                                    console.error(`Error closing client ${client.clientId}:`, closeErr);
-                                }
+                                clients.delete(client);
                             }
                         }
                     });
@@ -351,13 +360,11 @@ function startFFmpeg() {
                     }
                 } catch (error) {
                     console.error('Error processing video chunk:', error);
-                    // Reset stream buffer on error to prevent corruption
                     streamBuffer = Buffer.alloc(0);
                 }
             }
         } catch (error) {
             console.error('Error in FFmpeg data handler:', error);
-            // Reset stream buffer on error
             streamBuffer = Buffer.alloc(0);
         }
     });
