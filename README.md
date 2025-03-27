@@ -1106,6 +1106,7 @@ const ffmpeg = spawn('ffmpeg', [
    - Secondary output: High-quality JPEG frames for photo capture
 
 2. **Frame Capture Process**
+
    ```javascript
    app.post('/capture-photo', async (req, res) => {
        // Verify stream is active
