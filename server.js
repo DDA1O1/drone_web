@@ -326,9 +326,7 @@ function startFFmpeg() {
 // Modify photo capture endpoint
 app.post('/capture-photo', async (req, res) => {
     if (!ffmpegProcess) {
-        const error = new Error('Video stream not active');
-        error.clientError = true;
-        return handleError(error, res);
+        return res.status(400).send('Video stream not active');
     }
 
     try {
@@ -336,38 +334,15 @@ app.post('/capture-photo', async (req, res) => {
         const finalPhotoPath = join(photosDir, `photo_${timestamp}.jpg`);
         const currentFramePath = join(photosDir, 'current_frame.jpg');
 
-        try {
-            await fs.promises.access(currentFramePath, fs.constants.F_OK);
-        } catch (err) {
-            const error = new Error('No frame available for capture');
-            error.clientError = true;
-            return handleError(error, res);
-        }
-
-        const maxRetries = 3;
-        let retries = 0;
-        while (retries < maxRetries) {
-            try {
-                await fs.promises.copyFile(currentFramePath, finalPhotoPath);
-                const stats = await fs.promises.stat(finalPhotoPath);
-                if (stats.size > 0) {
-                    return res.json({ 
-                        fileName: `photo_${timestamp}.jpg`,
-                        size: stats.size,
-                        timestamp: timestamp
-                    });
-                }
-                throw new Error('Captured file is empty');
-            } catch (err) {
-                retries++;
-                if (retries >= maxRetries) {
-                    return handleError(new Error('Failed to capture valid photo after multiple attempts'), res);
-                }
-                await new Promise(resolve => setTimeout(resolve, 100));
-            }
-        }
+        await fs.promises.copyFile(currentFramePath, finalPhotoPath);
+        
+        res.json({ 
+            fileName: `photo_${timestamp}.jpg`,
+            timestamp: timestamp
+        });
     } catch (error) {
-        return handleError(error, res);
+        console.error('Failed to capture photo:', error);
+        res.status(500).send('Failed to capture photo');
     }
 });
 
