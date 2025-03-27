@@ -47,26 +47,24 @@ function App() {
           videoHeight: 480,
           
           // Performance optimizations
-          videoBufferSize: 1024 * 1024,    // Increased buffer size for better frame handling
-          streaming: true,                 // Enable streaming mode
-          autoplay: true,                 // Start playing immediately
-          control: true,                  // Show video controls
-          loop: false,                    // Don't loop the video
-          decodeFirstFrame: true,         // Decode and display first frame
-          progressive: true,              // Load and play frames as they arrive
+          videoBufferSize: 1024 * 1024,
+          streaming: true,
+          autoplay: true,
+          control: true,
+          loop: false,
+          decodeFirstFrame: true,
+          progressive: true,
           chunkSize: 3948,
-          maxAudioLag: 0,                // No audio, so disable audio lag compensation
-          disableGl: false,              // Enable WebGL when available
-          disableWebAssembly: false,     // Enable WebAssembly for better performance
-          preserveDrawingBuffer: true,    // Enable reliable canvas capture
-          canvas: null,                   // Let JSMpeg create its own canvas
+          maxAudioLag: 0,
+          disableGl: false,
+          disableWebAssembly: false,
+          canvas: null,
           
-          // WebGL specific options
+          // WebGL specific options - simplified
           webgl: {
-            preserveDrawingBuffer: true,  // Crucial for frame capture
-            antialias: false,            // Disable antialiasing for better performance
-            depth: false,                // Disable depth buffer as we don't need it
-            alpha: false,                // Disable alpha channel as we don't need it
+            antialias: false,            // Keep this for performance
+            depth: false,                // Keep this as we don't need depth
+            alpha: false,                // Keep this as we don't need transparency
           },
           
           // Enhanced connection handling
@@ -341,14 +339,6 @@ function App() {
         <div 
           ref={videoRef} 
           className="jsmpeg-player"
-          style={{
-            width: '640px',
-            height: '480px',
-            backgroundColor: '#000',
-            margin: '0 auto',
-            position: 'relative',
-            overflow: 'hidden'
-          }}
         ></div>
       </div>
 
