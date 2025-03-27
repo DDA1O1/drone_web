@@ -21,9 +21,7 @@ function App() {
   const retryAttemptsRef = useRef(0);               // Track SDK mode entry attempts
   
   // Reconnection handling
-  const reconnectTimeoutRef = useRef(null);          // Timeout for reconnection attempts
   const reconnectAttemptsRef = useRef(0);            // Counter for reconnection attempts
-  const MAX_RECONNECT_ATTEMPTS = 5;                  // Maximum reconnection attempts
   const MAX_SDK_RETRY_ATTEMPTS = 2;                  // Maximum attempts to enter SDK mode
 
   // Add new states
@@ -112,12 +110,7 @@ function App() {
     }
     
     return () => {
-        // Clear timeouts
-        if (reconnectTimeoutRef.current) {
-            clearTimeout(reconnectTimeoutRef.current);
-        }
-        
-        // Only destroy player on component unmount
+        // Destroy player on component unmount
         if (playerRef.current) {
             playerRef.current.destroy();
             playerRef.current = null;
