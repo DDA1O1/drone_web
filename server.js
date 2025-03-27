@@ -161,33 +161,29 @@ droneClient.on('message', (msg) => {
 let lastCommand = '';
 
 // Track monitoring intervals
-let monitoringIntervals = [];
+let monitoringInterval = null;
 
 // Start periodic state monitoring
 function startDroneMonitoring() {
-    // Clear any existing intervals first
+    // Clear any existing interval first
     stopDroneMonitoring();
     
-    // Check battery every 10 seconds
-    monitoringIntervals.push(setInterval(() => {
-        droneClient.send('battery?', 0, 'battery?'.length, TELLO_PORT, TELLO_IP);
-    }, 10000));
-
-    // Check flight time every 5 seconds
-    monitoringIntervals.push(setInterval(() => {
-        droneClient.send('time?', 0, 'time?'.length, TELLO_PORT, TELLO_IP);
-    }, 5000));
-
-    // Check speed every 2 seconds
-    monitoringIntervals.push(setInterval(() => {
-        droneClient.send('speed?', 0, 'speed?'.length, TELLO_PORT, TELLO_IP);
-    }, 2000));
+    // Create a single interval that checks all metrics
+    monitoringInterval = setInterval(() => {
+        // Send all monitoring commands in sequence
+        const commands = ['battery?', 'time?', 'speed?'];
+        commands.forEach(cmd => {
+            droneClient.send(cmd, 0, cmd.length, TELLO_PORT, TELLO_IP);
+        });
+    }, 5000); // Check all metrics every 5 seconds
 }
 
-// Stop all monitoring intervals
+// Stop monitoring interval
 function stopDroneMonitoring() {
-    monitoringIntervals.forEach(interval => clearInterval(interval));
-    monitoringIntervals = [];
+    if (monitoringInterval) {
+        clearInterval(monitoringInterval);
+        monitoringInterval = null;
+    }
 }
 
 // Add a flag to track if streaming is active
