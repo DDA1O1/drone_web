@@ -186,9 +186,6 @@ function stopDroneMonitoring() {
     }
 }
 
-// Add a flag to track if streaming is active
-let isStreamingActive = false;
-
 // Add route for drone commands
 app.get('/drone/:command', (req, res) => {
     try {
@@ -204,7 +201,6 @@ app.get('/drone/:command', (req, res) => {
                     if (!ffmpegProcess) {
                         startFFmpeg();
                     }
-                    isStreamingActive = true;
                     res.send('Command sent');
                 } catch (error) {
                     return handleError(ErrorTypes.PROCESS, 'Error starting video stream', res);
@@ -214,7 +210,11 @@ app.get('/drone/:command', (req, res) => {
             droneClient.send(command, 0, command.length, TELLO_PORT, TELLO_IP, (err) => {
                 if (err) return handleError(ErrorTypes.COMMAND, err, res);
                 
-                isStreamingActive = false;
+                // Kill the ffmpeg process if it exists
+                if (ffmpegProcess) {
+                    ffmpegProcess.kill();
+                    ffmpegProcess = null;
+                }
                 res.send('Stream paused');
             });
         } else if (command === 'command') {
@@ -236,9 +236,6 @@ app.get('/drone/:command', (req, res) => {
     }
 });
 
-
-// Add global variable for photo capture
-let captureRequested = false;
 
 // Start FFmpeg process for video streaming
 function startFFmpeg() {
@@ -293,7 +290,7 @@ function startFFmpeg() {
         if (ffmpegProcess === ffmpeg) {
             ffmpegProcess = null;
         }
-        if (isStreamingActive) {
+        if (command === 'streamon') {  // Only restart if the last command was streamon
             setTimeout(startFFmpeg, 1000);
         }
     });
@@ -305,7 +302,7 @@ function startFFmpeg() {
             if (ffmpegProcess === ffmpeg) {
                 ffmpegProcess = null;
             }
-            if (isStreamingActive) {
+            if (command === 'streamon') {  // Only restart if the last command was streamon
                 setTimeout(startFFmpeg, 1000);
             }
         } else {
@@ -318,7 +315,7 @@ function startFFmpeg() {
 
     ffmpeg.stdout.on('data', (data) => {
         try {
-            if (!isStreamingActive) return;
+            if (!ffmpegProcess) return;  // Replace isStreamingActive check with ffmpegProcess check
             
             streamBuffer = Buffer.concat([streamBuffer, data]);
             
@@ -338,12 +335,11 @@ function startFFmpeg() {
                         }
                     });
                     
-                    if (isRecording && mp4Process && mp4Process.stdin.writable) {
+                    if (mp4Process && mp4Process.stdin.writable) {
                         try {
                             mp4Process.stdin.write(chunk);
                         } catch (error) {
                             handleError(ErrorTypes.PROCESS, 'Failed to write to MP4 stream');
-                            isRecording = false;
                             if (mp4Process) {
                                 mp4Process.stdin.end();
                                 mp4Process = null;
@@ -498,7 +494,7 @@ app.post('/start-recording', (req, res) => {
     }
 });
 
-app.post('/stop-recording', (req, res) => {
+app.post('/stop-recording', async (req, res) => {
     if (!isRecording) {
         return handleError(ErrorTypes.PROCESS, 'No active recording', res);
     }
@@ -507,20 +503,32 @@ app.post('/stop-recording', (req, res) => {
         isRecording = false;
         
         if (mp4Process) {
+            // End the input stream and wait for process to finish
             mp4Process.stdin.end();
             
-            setTimeout(() => {
-                if (mp4Process) {
-                    mp4Process.kill();
-                    console.log('MP4 process killed');
-                }
-            }, 1000);
-            
-            mp4Process.on('exit', () => {
-                console.log('MP4 process cleaned up successfully');
-                mp4Process = null;
-                mp4FilePath = null;
+            // Wait for process to exit cleanly
+            await new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                    mp4Process.kill('SIGKILL');
+                    reject(new Error('MP4 process termination timeout'));
+                }, 5000);  // 5 second timeout
+
+                mp4Process.once('exit', (code, signal) => {
+                    clearTimeout(timeout);
+                    if (code === 0 || signal === 'SIGKILL') {
+                        resolve();
+                    } else {
+                        reject(new Error(`MP4 process exited with code ${code}, signal: ${signal}`));
+                    }
+                });
+            }).catch(error => {
+                console.warn('MP4 process cleanup warning:', error.message);
             });
+
+            // Clear process references
+            mp4Process = null;
+            mp4FilePath = null;
+            console.log('MP4 recording stopped and cleaned up');
         }
         
         res.send('Recording stopped');
@@ -596,30 +604,19 @@ const gracefulShutdown = async () => {
 app.use(express.static(join(__dirname, 'dist')));
 
 // Start servers sequentially
-const startServers = async () => {
-    try {
-        // Start Express server first
-        await new Promise((resolve) => {
-            app.listen(port, () => {
-                console.log(`Express server running on http://localhost:${port}`);
-                resolve();
-            });
-        });
-
-        // Verify WebSocket server is running
+const startServers = () => {
+    app.listen(port, () => {
+        console.log(`Express server running on http://localhost:${port}`);
+        
+        // Check WebSocket server status
         if (wss.readyState !== wss.OPEN) {
-            console.log('Waiting for WebSocket server to be ready...');
-            await new Promise((resolve) => {
-                wss.once('listening', resolve);
+            wss.once('listening', () => {
+                console.log('Both servers are running');
             });
+        } else {
+            console.log('Both servers are running');
         }
-        
-        console.log('Both servers are running');
-        
-    } catch (error) {
-        console.error('Error starting servers:', error);
-        process.exit(1);
-    }
+    });
 };
 
 startServers(); 
