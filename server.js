@@ -246,7 +246,7 @@ app.get('/drone/:command', (req, res) => {
 
 // Start FFmpeg process for video streaming
 function startFFmpeg() {
-    console.log('Starting FFmpeg process with AMD hardware acceleration...');
+    console.log('Starting FFmpeg process...');
     
     // Only start if no existing process
     if (videoState.stream.process) {
@@ -259,46 +259,48 @@ function startFFmpeg() {
         '-loglevel', 'error',     // Only show errors in logs
         '-y',                     // Force overwrite output files
 
-        // Hardware-accelerated Input configuration
-        '-hwaccel', 'd3d11va',                // Use DirectX 11 for hardware decoding
-        '-hwaccel_output_format', 'd3d11',    // Output in D3D11 format
+        // Input configuration
+        '-fflags', '+genpts',     // Generate presentation timestamps
         '-i', `udp://0.0.0.0:${TELLO_VIDEO_PORT}?overrun_nonfatal=1&fifo_size=50000000`,
 
-        // First output: Hardware accelerated streaming
-        '-c:v', 'h264_amf',              // Use AMD's hardware encoder
-        '-usage', 'ultralowlatency',     // Optimize for lowest latency
-        '-quality', 'speed',             // Prefer speed over quality
-        '-rc', 'cbr',                    // Constant bitrate mode
-        '-b:v', '2000k',                 // Target bitrate
-        '-maxrate', '2500k',             // Maximum bitrate
-        '-bufsize', '2500k',             // Buffer size
-        '-frame_size', '640x480',        // Output resolution
-        '-r', '30',                      // Frame rate
-        '-profile:v', 'main',            // H.264 profile
-        '-level', '4.1',                 // H.264 level
-        '-f', 'mpegts',                  // Output format for JSMpeg
-        'pipe:1',                        // Output to stdout
+        // First output: MPEG1 video for JSMpeg streaming
+        '-map', '0:v:0',         // Map video stream
+        '-c:v', 'mpeg1video',    // Use MPEG1 video codec (works well with JSMpeg)
+        '-b:v', '2000k',         // Increased base bitrate to 2 Mbps
+        '-maxrate', '4000k',     // Increased max bitrate to 4 Mbps
+        '-bufsize', '8000k',     // Doubled buffer size relative to maxrate
+        '-minrate', '1000k',     // Added minimum bitrate constraint
+        '-an',                   // Remove audio (drone has no audio)
+        '-f', 'mpegts',          // Output format: MPEG transport stream
+        '-s', '640x480',         // Video size: 640x480 pixels
+        '-r', '30',              // Frame rate: 30 fps
+        '-q:v', '5',             // Video quality (1-31, lower is better)
+        '-tune', 'zerolatency',  // Optimize for low latency
+        '-preset', 'ultrafast',  // Fastest encoding speed
+        '-pix_fmt', 'yuv420p',   // Pixel format: YUV420
+        '-flush_packets', '1',    // Flush packets immediately
+        '-reset_timestamps', '1', // Reset timestamps at the start
+        'pipe:1',                // Output to stdout for streaming
 
-        // Second output: JPEG frames for photo capture (minimal impact)
-        '-map', '0:v:0',                 // Map video stream
-        '-c:v', 'mjpeg',                 // JPEG codec for stills
-        '-q:v', '2',                     // High quality for stills
-        '-vf', 'fps=2',                  // 2 frames per second is enough for stills
-        '-update', '1',                  // Update the same file
-        '-f', 'image2',                  // Output format for stills
+        // Second output: JPEG frames for photo capture
+        '-map', '0:v:0',         // Map video stream again
+        '-c:v', 'mjpeg',         // JPEG codec for stills
+        '-q:v', '2',             // High quality for stills
+        '-vf', 'fps=2',          // 2 frames per second is enough for stills
+        '-update', '1',          // Update the same file
+        '-f', 'image2',          // Output format for stills
         join(photosDir, 'current_frame.jpg')
     ]);
 
     videoState.stream.process = ffmpeg;
 
-    // Enhanced error logging for hardware acceleration
+    // Enhanced error logging
     ffmpeg.stderr.on('data', (data) => {
         const message = data.toString().trim();
         if (message && !message.includes('Last message repeated')) {
             // Filter out common non-error messages
             if (!message.includes('already exists') && 
-                !message.includes('Overwrite?') &&
-                !message.includes('hwaccel initialisation')) {
+                !message.includes('Overwrite?')) {
                 console.error('FFmpeg error:', message);
             }
         }
