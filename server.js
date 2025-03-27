@@ -195,13 +195,51 @@ droneClient.on('message', (msg) => {
 // Track last command sent
 let lastCommand = '';
 
+// Simplified drone response handler
+async function getDroneResponse(command, updateLastCommand = true) {
+    if (updateLastCommand) {
+        lastCommand = command;
+    }
+    
+    return new Promise((resolve, reject) => {
+        const messageHandler = (msg) => {
+            droneClient.removeListener('message', messageHandler);
+            resolve(msg.toString().trim());
+        };
+        
+        droneClient.once('message', messageHandler);
+        
+        // Set timeout
+        setTimeout(() => {
+            droneClient.removeListener('message', messageHandler);
+            reject(new Error('Drone not responding'));
+        }, 5000);
+        
+        // Send command
+        droneClient.send(command, 0, command.length, TELLO_PORT, TELLO_IP, (err) => {
+            if (err) {
+                droneClient.removeListener('message', messageHandler);
+                reject(err);
+            }
+        });
+    });
+}
+
 // Add route for drone commands
 app.get('/drone/:command', async (req, res) => {
     try {
         const command = req.params.command;
-        lastCommand = command;
+        lastCommand = command; // Track last command for all routes
         
-        if (command === 'streamon') {
+        if (command === 'command') {
+            try {
+                const response = await getDroneResponse(command, false); // Don't update lastCommand twice
+                startDroneMonitoring();
+                res.json({ status: response === 'ok' ? 'connected' : 'failed', response });
+            } catch (error) {
+                res.json({ status: 'failed', response: error.message });
+            }
+        } else if (command === 'streamon') {
             droneClient.send(command, 0, command.length, TELLO_PORT, TELLO_IP, (err) => {
                 if (err) {
                     err.clientError = true;
@@ -232,38 +270,6 @@ app.get('/drone/:command', async (req, res) => {
                 }
                 res.send('Stream paused');
             });
-        } else if (command === 'command') {
-            // Create a Promise to wait for drone response
-            const responsePromise = new Promise((resolve) => {
-                // One-time message handler
-                const messageHandler = (msg) => {
-                    const response = msg.toString().trim();
-                    droneClient.removeListener('message', messageHandler);
-                    resolve(response);
-                };
-                droneClient.once('message', messageHandler);
-            });
-
-            // Send command
-            droneClient.send(command, 0, command.length, TELLO_PORT, TELLO_IP, (err) => {
-                if (err) {
-                    err.clientError = true;
-                    return handleError(err, res);
-                }
-            });
-
-            // Wait for response with 5 second timeout
-            const timeout = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Drone not responding')), 5000)
-            );
-
-            try {
-                const response = await Promise.race([responsePromise, timeout]);
-                startDroneMonitoring();
-                res.json({ status: response === 'ok' ? 'connected' : 'failed', response });
-            } catch (error) {
-                res.json({ status: 'failed', response: error.message });
-            }
         } else {
             // Send other commands normally
             droneClient.send(command, 0, command.length, TELLO_PORT, TELLO_IP, (err) => {
