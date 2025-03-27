@@ -267,11 +267,6 @@ function startFFmpeg() {
 
     ffmpegProcess = ffmpeg;
 
-    let streamBuffer = Buffer.alloc(0);
-    const MPEGTS_PACKET_SIZE = 188;
-    const PACKETS_PER_CHUNK = 21;
-    const CHUNK_SIZE = MPEGTS_PACKET_SIZE * PACKETS_PER_CHUNK;
-
     // Only log actual errors from stderr
     ffmpeg.stderr.on('data', (data) => {
         const message = data.toString().trim();
@@ -279,82 +274,60 @@ function startFFmpeg() {
             if (message.toLowerCase().includes('error') || 
                 message.toLowerCase().includes('failed') ||
                 message.toLowerCase().includes('unable to')) {
-                handleError(ErrorTypes.STREAM, message);
+                console.error('FFmpeg error:', message);
             }
         }
     });
 
-    // Handle fatal errors with recovery
+    // Handle process errors and exit
     ffmpeg.on('error', (error) => {
-        handleError(ErrorTypes.PROCESS, 'FFmpeg fatal error: ' + error.message);
+        console.error('FFmpeg process error:', error);
         if (ffmpegProcess === ffmpeg) {
             ffmpegProcess = null;
-        }
-        if (command === 'streamon') {  // Only restart if the last command was streamon
-            setTimeout(startFFmpeg, 1000);
-        }
-    });
-
-    // Handle process exit with recovery
-    ffmpeg.on('exit', (code, signal) => {
-        if (code !== 0) {
-            handleError(ErrorTypes.PROCESS, `FFmpeg process exited with code ${code}, signal: ${signal}`);
-            if (ffmpegProcess === ffmpeg) {
-                ffmpegProcess = null;
-            }
-            if (command === 'streamon') {  // Only restart if the last command was streamon
+            if (lastCommand === 'streamon') {
                 setTimeout(startFFmpeg, 1000);
             }
-        } else {
-            console.log('FFmpeg process closed normally');
-            if (ffmpegProcess === ffmpeg) {
-                ffmpegProcess = null;
+        }
+    });
+
+    ffmpeg.on('exit', (code, signal) => {
+        if (code !== 0) {
+            console.error(`FFmpeg process exited with code ${code}, signal: ${signal}`);
+        }
+        if (ffmpegProcess === ffmpeg) {
+            ffmpegProcess = null;
+            if (lastCommand === 'streamon') {
+                setTimeout(startFFmpeg, 1000);
             }
         }
     });
 
-    ffmpeg.stdout.on('data', (data) => {
-        try {
-            if (!ffmpegProcess) return;  // Replace isStreamingActive check with ffmpegProcess check
-            
-            streamBuffer = Buffer.concat([streamBuffer, data]);
-            
-            while (streamBuffer.length >= CHUNK_SIZE) {
+    // Stream video data directly to WebSocket clients
+    ffmpeg.stdout.on('data', (chunk) => {
+        if (!ffmpegProcess) return;
+
+        // Send to all connected WebSocket clients
+        clients.forEach((client) => {
+            if (client.readyState === 1) {
                 try {
-                    const chunk = streamBuffer.subarray(0, CHUNK_SIZE);
-                    streamBuffer = streamBuffer.subarray(CHUNK_SIZE);
-                    
-                    clients.forEach((client) => {
-                        if (client.readyState === 1) {
-                            try {
-                                client.send(chunk, { binary: true });
-                            } catch (err) {
-                                handleError(ErrorTypes.NETWORK, `Failed to send chunk to client ${client.clientId}`);
-                                clients.delete(client);
-                            }
-                        }
-                    });
-                    
-                    if (mp4Process && mp4Process.stdin.writable) {
-                        try {
-                            mp4Process.stdin.write(chunk);
-                        } catch (error) {
-                            handleError(ErrorTypes.PROCESS, 'Failed to write to MP4 stream');
-                            if (mp4Process) {
-                                mp4Process.stdin.end();
-                                mp4Process = null;
-                                mp4FilePath = null;
-                            }
-                        }
-                    }
-                } catch (error) {
-                    handleError(ErrorTypes.STREAM, 'Error processing video chunk');
-                    streamBuffer = Buffer.alloc(0);
+                    client.send(chunk, { binary: true });
+                } catch (err) {
+                    console.error(`Failed to send to client: ${err}`);
+                    clients.delete(client);
                 }
             }
-        } catch (error) {
-            handleError(ErrorTypes.STREAM, 'Error in FFmpeg data handler');
-            streamBuffer = Buffer.alloc(0);
+        });
+        
+        // Send to MP4 recording if active
+        if (mp4Process?.stdin.writable) {
+            try {
+                mp4Process.stdin.write(chunk);
+            } catch (error) {
+                console.error('Failed to write to MP4 stream:', error);
+                mp4Process.stdin.end();
+                mp4Process = null;
+                mp4FilePath = null;
+            }
         }
     });
 
@@ -559,7 +532,7 @@ const gracefulShutdown = async () => {
         try {
             client.close();
         } catch (err) {
-            console.error('Error closing client:', err);
+            handleError(ErrorTypes.NETWORK, 'Error closing client: ' + err.message);
         }
     });
 
@@ -571,7 +544,7 @@ const gracefulShutdown = async () => {
             });
         });
     } catch (err) {
-        console.error('Error sending emergency command:', err);
+        handleError(ErrorTypes.COMMAND, 'Error sending emergency command: ' + err.message);
     }
 
     // 4. Close UDP socket
