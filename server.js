@@ -89,7 +89,7 @@ const droneClient = dgram.createSocket('udp4');
 // Create WebSocket server
 const wss = new WebSocketServer({ 
     port: streamPort,
-    clientTracking: true  // Enable basic client tracking
+    clientTracking: true
 });
 
 const clients = new Set(); // Set to store active clients
@@ -101,74 +101,60 @@ wss.on('listening', () => {
 });
 
 wss.on('error', (error) => {
-    console.error('WebSocket server error:', error);
+    handleError(ErrorTypes.NETWORK, 'WebSocket server error: ' + error.message);
 });
 
 wss.on('connection', (ws, req) => {
     try {
-        // Assign client ID and add to tracked clients
         ws.clientId = nextClientId++;
         clients.add(ws);
         
-        console.log(`New client ${ws.clientId} connected`);
-        console.log(`Total connected clients: ${clients.size}`);
+        console.log(`New client ${ws.clientId} connected (Total: ${clients.size})`);
 
-        // Handle disconnection
         ws.on('close', () => {
-            console.log(`Client ${ws.clientId} disconnected`);
             clients.delete(ws);
-            console.log(`Remaining clients: ${clients.size}`);
+            console.log(`Client ${ws.clientId} disconnected (Remaining: ${clients.size})`);
         });
 
-        // Handle errors
         ws.on('error', (error) => {
-            console.error(`Client ${ws.clientId} error:`, error);
+            handleError(ErrorTypes.NETWORK, `Client ${ws.clientId} error: ${error.message}`);
             clients.delete(ws);
         });
 
     } catch (error) {
-        console.error('Error in WebSocket connection handler:', error);
+        handleError(ErrorTypes.NETWORK, 'WebSocket connection error: ' + error.message);
         ws.close(1011, 'Internal Server Error');
     }
 });
 
-// Handle drone responses
+// Handle drone responses with error handling
 droneClient.on('message', (msg) => {
-    const response = msg.toString();
-    
-    // Parse specific command responses
-    if (!isNaN(response)) {
-        if (lastCommand === 'battery?') {
+    try {
+        const response = msg.toString();
+        
+        if (!isNaN(response)) {
+            const value = parseInt(response);
+            const messageType = lastCommand.replace('?', '');
+            
             clients.forEach(client => {
                 if (client.readyState === 1) {
-                    client.send(JSON.stringify({
-                        type: 'battery',
-                        value: parseInt(response)
-                    }));
-                }
-            });
-        } else if (lastCommand === 'time?') {
-            clients.forEach(client => {
-                if (client.readyState === 1) {
-                    client.send(JSON.stringify({
-                        type: 'flightTime',
-                        value: parseInt(response)
-                    }));
-                }
-            });
-        } else if (lastCommand === 'speed?') {
-            clients.forEach(client => {
-                if (client.readyState === 1) {
-                    client.send(JSON.stringify({
-                        type: 'speed',
-                        value: parseInt(response)
-                    }));
+                    try {
+                        client.send(JSON.stringify({
+                            type: messageType,
+                            value: value
+                        }));
+                    } catch (err) {
+                        handleError(ErrorTypes.NETWORK, `Failed to send ${messageType} to client ${client.clientId}`);
+                        clients.delete(client);
+                    }
                 }
             });
         }
+        
+        console.log('Drone response:', response);
+    } catch (error) {
+        handleError(ErrorTypes.COMMAND, 'Error processing drone response: ' + error.message);
     }
-    
-    console.log('Drone response:', response);
 });
 
 // Track last command sent
@@ -270,56 +256,47 @@ function startFFmpeg() {
 
     const ffmpeg = spawn('ffmpeg', [
         '-hide_banner',
-        '-loglevel', 'warning',  // Changed from 'error' to 'warning' to catch important messages
-        
-        // Input configuration with larger buffer
+        '-loglevel', 'warning',
         '-i', `udp://0.0.0.0:${TELLO_VIDEO_PORT}?overrun_nonfatal=1&fifo_size=50000000`,
-        
-        // First output: Stream for JSMpeg
-        '-c:v', 'mpeg1video',      // Convert to mpeg1video for JSMpeg
-        '-b:v', '800k',            // Video bitrate
-        '-r', '30',                // Frame rate
-        '-f', 'mpegts',           // MPEG-TS format required by JSMpeg
+        '-c:v', 'mpeg1video',
+        '-b:v', '800k',
+        '-r', '30',
+        '-f', 'mpegts',
         '-flush_packets', '1',
         'pipe:1',
-        
-        // Second output: High-quality JPEG frames
         '-c:v', 'mjpeg',
-        '-q:v', '2',              // High quality (1-31, lower is better)
-        '-vf', 'fps=2',           // Limit frame updates (2 fps is enough for snapshots)
-        '-update', '1',           // Update the same file
+        '-q:v', '2',
+        '-vf', 'fps=2',
+        '-update', '1',
         '-f', 'image2',
         join(photosDir, 'current_frame.jpg')
     ]);
 
     ffmpegProcess = ffmpeg;
 
-    let streamBuffer = Buffer.alloc(0); // Buffer to store video data
-    const MPEGTS_PACKET_SIZE = 188; // MPEG-TS packet size
-    const PACKETS_PER_CHUNK = 21; // Send ~4KB (21 * 188 = 3948 bytes)
+    let streamBuffer = Buffer.alloc(0);
+    const MPEGTS_PACKET_SIZE = 188;
+    const PACKETS_PER_CHUNK = 21;
     const CHUNK_SIZE = MPEGTS_PACKET_SIZE * PACKETS_PER_CHUNK;
 
     // Only log actual errors from stderr
     ffmpeg.stderr.on('data', (data) => {
         const message = data.toString().trim();
         if (message && !message.includes('Last message repeated')) {
-            // Only log if it contains specific error keywords
             if (message.toLowerCase().includes('error') || 
                 message.toLowerCase().includes('failed') ||
                 message.toLowerCase().includes('unable to')) {
-                console.error('FFmpeg Error:', message);
+                handleError(ErrorTypes.STREAM, message);
             }
         }
     });
 
     // Handle fatal errors with recovery
     ffmpeg.on('error', (error) => {
-        console.error('FFmpeg fatal error:', error);
-        // Only clear the reference if the process actually died
+        handleError(ErrorTypes.PROCESS, 'FFmpeg fatal error: ' + error.message);
         if (ffmpegProcess === ffmpeg) {
             ffmpegProcess = null;
         }
-        // Attempt to restart after a delay if streaming is still active
         if (isStreamingActive) {
             setTimeout(startFFmpeg, 1000);
         }
@@ -327,13 +304,11 @@ function startFFmpeg() {
 
     // Handle process exit with recovery
     ffmpeg.on('exit', (code, signal) => {
-        if (code !== 0) {  // Only log non-zero exit codes (errors)
-            console.error(`FFmpeg process exited with code ${code}, signal: ${signal}`);
-            // Only clear the reference if the process actually died
+        if (code !== 0) {
+            handleError(ErrorTypes.PROCESS, `FFmpeg process exited with code ${code}, signal: ${signal}`);
             if (ffmpegProcess === ffmpeg) {
                 ffmpegProcess = null;
             }
-            // Attempt to restart after a delay if streaming is still active
             if (isStreamingActive) {
                 setTimeout(startFFmpeg, 1000);
             }
@@ -347,40 +322,31 @@ function startFFmpeg() {
 
     ffmpeg.stdout.on('data', (data) => {
         try {
-            // Only process video data if streaming is active
             if (!isStreamingActive) return;
             
-            // Combine new data with existing buffer
             streamBuffer = Buffer.concat([streamBuffer, data]);
             
-            // While we have enough packets to make a chunk
             while (streamBuffer.length >= CHUNK_SIZE) {
                 try {
-                    // Take complete packets
                     const chunk = streamBuffer.subarray(0, CHUNK_SIZE);
-                    
-                    // Keep remaining bytes
                     streamBuffer = streamBuffer.subarray(CHUNK_SIZE);
                     
-                    // Send to each connected client
                     clients.forEach((client) => {
                         if (client.readyState === 1) {
                             try {
                                 client.send(chunk, { binary: true });
                             } catch (err) {
-                                console.error(`Error sending chunk to client ${client.clientId}:`, err);
+                                handleError(ErrorTypes.NETWORK, `Failed to send chunk to client ${client.clientId}`);
                                 clients.delete(client);
                             }
                         }
                     });
                     
-                    // Only write to MP4 if we're actively recording and have a valid process
                     if (isRecording && mp4Process && mp4Process.stdin.writable) {
                         try {
                             mp4Process.stdin.write(chunk);
                         } catch (error) {
-                            console.error('Error writing to MP4 stream:', error);
-                            // If we encounter an error writing, stop the recording
+                            handleError(ErrorTypes.PROCESS, 'Failed to write to MP4 stream');
                             isRecording = false;
                             if (mp4Process) {
                                 mp4Process.stdin.end();
@@ -390,17 +356,17 @@ function startFFmpeg() {
                         }
                     }
                 } catch (error) {
-                    console.error('Error processing video chunk:', error);
+                    handleError(ErrorTypes.STREAM, 'Error processing video chunk');
                     streamBuffer = Buffer.alloc(0);
                 }
             }
         } catch (error) {
-            console.error('Error in FFmpeg data handler:', error);
+            handleError(ErrorTypes.STREAM, 'Error in FFmpeg data handler');
             streamBuffer = Buffer.alloc(0);
         }
     });
 
-    return ffmpeg; // Return the FFmpeg instance
+    return ffmpeg;
 }
 
 // Modify photo capture endpoint
@@ -462,7 +428,6 @@ let isRecording = false;
 function initializeMP4Process() {
     console.log('Starting MP4 process...');
     
-    // Only start if no existing process
     if (mp4Process) {
         console.log('MP4 process already running');
         return mp4Process;
@@ -473,7 +438,6 @@ function initializeMP4Process() {
     mp4FilePath = join(mp4Dir, mp4FileName);
     
     try {
-        // Set up the mp4 conversion process
         mp4Process = spawn('ffmpeg', [
             '-i', 'pipe:0',
             '-c:v', 'copy',
@@ -484,20 +448,23 @@ function initializeMP4Process() {
             mp4FilePath
         ]);
 
-        // Add error handlers
         mp4Process.stderr.on('data', (data) => {
-            console.log('FFmpeg MP4:', data.toString());
+            const message = data.toString().trim();
+            if (message.toLowerCase().includes('error') || 
+                message.toLowerCase().includes('failed')) {
+                handleError(ErrorTypes.PROCESS, `MP4 FFmpeg: ${message}`);
+            }
         });
 
         mp4Process.on('error', (err) => {
-            console.error('FFmpeg MP4 error:', err);
+            handleError(ErrorTypes.PROCESS, 'MP4 process error: ' + err.message);
             mp4Process = null;
             mp4FilePath = null;
         });
 
         mp4Process.on('exit', (code, signal) => {
             if (code !== 0) {
-                console.error(`MP4 process exited with code ${code}, signal: ${signal}`);
+                handleError(ErrorTypes.PROCESS, `MP4 process exited with code ${code}, signal: ${signal}`);
             }
             mp4Process = null;
             mp4FilePath = null;
@@ -505,7 +472,7 @@ function initializeMP4Process() {
 
         return mp4Process;
     } catch (error) {
-        console.error('Error initializing MP4 process:', error);
+        handleError(ErrorTypes.PROCESS, 'Failed to initialize MP4 process: ' + error.message);
         mp4Process = null;
         mp4FilePath = null;
         return null;
@@ -514,56 +481,45 @@ function initializeMP4Process() {
 
 // Add route for saving video chunks
 app.post('/start-recording', (req, res) => {
-    // Check if recording is already in progress
     if (isRecording) {
-        return res.status(409).send('Recording already in progress');
+        return handleError(ErrorTypes.PROCESS, 'Recording already in progress', res);
     }
 
     try {
-        // Initialize MP4 process if not already running
         if (!mp4Process) {
             initializeMP4Process();
         }
 
-        // Check if process initialized successfully
         if (!mp4Process || !mp4Process.stdin.writable) {
-            throw new Error('Failed to initialize MP4 process');
+            return handleError(ErrorTypes.PROCESS, 'Failed to initialize MP4 process', res);
         }
 
-        // Set recording state to true
         isRecording = true;
-
         res.json({ mp4FileName: path.basename(mp4FilePath) });
         
     } catch (error) {
-        console.error('Error starting recording:', error);
-        res.status(500).send('Failed to start recording');
+        return handleError(ErrorTypes.PROCESS, error, res);
     }
 });
 
 app.post('/stop-recording', (req, res) => {
     if (!isRecording) {
-        return res.status(400).send('No active recording');
+        return handleError(ErrorTypes.PROCESS, 'No active recording', res);
     }
 
     try {
-        // Set recording state to false first
         isRecording = false;
         
-        // Clean up the MP4 process
         if (mp4Process) {
-            // End the input stream
             mp4Process.stdin.end();
             
-            // Kill the process after a short delay to allow it to finish writing
             setTimeout(() => {
                 if (mp4Process) {
                     mp4Process.kill();
                     console.log('MP4 process killed');
                 }
-            }, 1000); // Give it 1 second to finish writing
+            }, 1000);
             
-            // Clear references after process exits
             mp4Process.on('exit', () => {
                 console.log('MP4 process cleaned up successfully');
                 mp4Process = null;
@@ -572,9 +528,8 @@ app.post('/stop-recording', (req, res) => {
         }
         
         res.send('Recording stopped');
-    } catch (err) {
-        console.error('Error stopping recording:', err);
-        res.status(500).send('Error stopping recording');
+    } catch (error) {
+        return handleError(ErrorTypes.PROCESS, error, res);
     }
 });
 
