@@ -74,10 +74,7 @@ function App() {
 
   // ==== LIFE CYCLE MANAGEMENT ====
   useEffect(() => {
-    // Initialize player on component mount
-    if (!playerRef.current) {
-        initializePlayer();
-    }
+    
     
     return () => {
         // Destroy player on component unmount

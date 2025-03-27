@@ -9,6 +9,9 @@ import fs from 'fs';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Add this near the top of the file, with other state variables
+let monitoringInterval = null;
+
 // Simple error handling function
 function handleError(error, res = null) {
     // Always log the error
@@ -112,7 +115,10 @@ let droneState = {
 
 // Simplified monitoring - just check battery every 10 seconds
 function startDroneMonitoring() {
-    if (monitoringInterval) return;  // Don't create multiple intervals
+    if (monitoringInterval) {
+        // Don't create multiple intervals
+        return;
+    }
     
     monitoringInterval = setInterval(() => {
         droneClient.send('battery?', 0, 8, TELLO_PORT, TELLO_IP);
@@ -120,8 +126,10 @@ function startDroneMonitoring() {
 }
 
 function stopDroneMonitoring() {
-    clearInterval(monitoringInterval);
-    monitoringInterval = null;
+    if (monitoringInterval) {
+        clearInterval(monitoringInterval);
+        monitoringInterval = null;
+    }
 }
 
 // Update the message handler to store state
