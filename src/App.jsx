@@ -4,33 +4,45 @@
  * It uses JSMpeg for video decoding and WebSocket for real-time communication.
  */
 
-import { useState, useEffect, useRef } from 'react'
+import { useEffect, useRef } from 'react'
+import { useDispatch, useSelector } from 'react-redux'
 import JSMpeg from '@cycjimmy/jsmpeg-player'
+import {
+  setDroneConnection,
+  setVideoConnection,
+  setStreamEnabled,
+  setRecordingStatus,
+  setRecordingFiles,
+  setError,
+  incrementRetryAttempts,
+  resetRetryAttempts
+} from './store/slices/droneSlice'
 import './App.css'
 
 function App() {
   // Refs for managing video player and container
-  const videoRef = useRef(null);      // Reference to video container div and since it is a container, that doesn't change often we use useRef
-  const playerRef = useRef(null);     // Reference to JSMpeg player instance
+  const videoRef = useRef(null);
+  const playerRef = useRef(null);
   
-  // State management
-  const [videoConnected, setVideoConnected] = useState(false);  // Video stream status
-  const [droneConnected, setDroneConnected] = useState(false);  // Drone connection status
-  const [error, setError] = useState(null);          // Error message state
-  const [streamEnabled, setStreamEnabled] = useState(false);    // Track if stream is enabled
-  const retryAttemptsRef = useRef(0);               // Track SDK mode entry attempts
+  // Redux
+  const dispatch = useDispatch();
+  const {
+    droneConnected,
+    videoConnected,
+    streamEnabled,
+    isRecording,
+    recordingFiles,
+    error,
+    retryAttempts
+  } = useSelector(state => state.drone);
   
-  // Reconnection handling
-  const MAX_SDK_RETRY_ATTEMPTS = 2;                  // Maximum attempts to enter SDK mode
-
-  // Add new states
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingFiles, setRecordingFiles] = useState(null);
+  // Constants
+  const MAX_SDK_RETRY_ATTEMPTS = 2;
 
   // Error handling utility
   const handleOperationError = (operation, error, additionalActions = null) => {
     console.error(`Error during ${operation}:`, error);
-    setError(`Failed to ${operation}: ${error.message}`);
+    dispatch(setError(`Failed to ${operation}: ${error.message}`));
     if (additionalActions) {
       additionalActions(error);
     }
@@ -38,7 +50,6 @@ function App() {
 
   /**
    * Initializes the JSMpeg video player with optimized settings
-   * Handles connection, error states, and reconnection logic
    */
   const initializePlayer = () => {
     if (!videoRef.current || playerRef.current) return;
@@ -46,28 +57,24 @@ function App() {
     try {
       const url = `ws://${window.location.hostname}:3001`;
       const player = new JSMpeg.VideoElement(videoRef.current, url, {
-        // Video dimensions - match FFmpeg output
         videoWidth: 640,
         videoHeight: 480,
-        
-        // Performance optimizations
-        videoBufferSize: 512 * 1024,    // Increased for stability
+        videoBufferSize: 512 * 1024,
         streaming: true,
         autoplay: true,
         decodeFirstFrame: true,
-        chunkSize: 4096,                // Increased chunk size
-        disableGl: false,               // Enable WebGL if available
-        progressive: true,              // Enable progressive decoding
-        throttled: false,               // Don't throttle decoding
+        chunkSize: 4096,
+        disableGl: false,
+        progressive: true,
+        throttled: false,
         
-        // Simplified connection handling
         hooks: {
           play: () => {
             console.log('Video playback started');
-            setVideoConnected(true);
+            dispatch(setVideoConnection(true));
           },
-          pause: () => setVideoConnected(false),
-          stop: () => setVideoConnected(false),
+          pause: () => dispatch(setVideoConnection(false)),
+          stop: () => dispatch(setVideoConnection(false)),
           error: (error) => {
             console.error('JSMpeg error:', error);
             handleOperationError('connect to video stream', error);
@@ -77,7 +84,6 @@ function App() {
       
       playerRef.current = player.player;
 
-      // Add error event listener to the WebSocket connection
       if (player?.player?.source?.socket) {
         player.player.source.socket.addEventListener('error', (error) => {
           console.error('WebSocket error:', error);
@@ -92,32 +98,33 @@ function App() {
 
   // ==== LIFE CYCLE MANAGEMENT ====
   useEffect(() => {
-    
-    
     return () => {
-        // Destroy player on component unmount you do not want to leave the player running and websocket open
-        if (playerRef.current) {
-            playerRef.current.destroy();
-            playerRef.current = null;
-        }
-        
-        // Reset states
-        setVideoConnected(false);
-        setDroneConnected(false);
-        setStreamEnabled(false);
-        setError(null);
-        
-        // Reset attempt counters
-        retryAttemptsRef.current = 0;
+      if (playerRef.current) {
+        playerRef.current.destroy();
+        playerRef.current = null;
+      }
+      
+      dispatch(setVideoConnection(false));
+      dispatch(setDroneConnection(false));
+      dispatch(setStreamEnabled(false));
+      dispatch(setError(null));
+      dispatch(resetRetryAttempts());
     };
-  }, []);
+  }, [dispatch]);
+
+  // Handle video stream status changes
+  useEffect(() => {
+    if (!videoConnected && droneConnected) {
+      enterSDKMode();
+    }
+  }, [videoConnected, droneConnected]);
 
   /**
    * Attempts to enter SDK mode with limited retries
    */
   const enterSDKMode = async () => {
-    if (retryAttemptsRef.current >= MAX_SDK_RETRY_ATTEMPTS) {
-      setError('Failed to connect to drone after maximum retry attempts');
+    if (retryAttempts >= MAX_SDK_RETRY_ATTEMPTS) {
+      dispatch(setError('Failed to connect to drone after maximum retry attempts'));
       return false;
     }
 
@@ -127,33 +134,24 @@ function App() {
       const success = data.status === 'connected';
       
       if (success) {
-        setDroneConnected(true);
-        setError(null);
-        retryAttemptsRef.current = 0;
+        dispatch(setDroneConnection(true));
+        dispatch(setError(null));
+        dispatch(resetRetryAttempts());
       } else {
-        setError(`Drone connection failed: ${data.response}`);
-        retryAttemptsRef.current++;
+        dispatch(setError(`Drone connection failed: ${data.response}`));
+        dispatch(incrementRetryAttempts());
       }
       return success;
     } catch (error) {
       handleOperationError('enter SDK mode', error, () => {
-        retryAttemptsRef.current++;
+        dispatch(incrementRetryAttempts());
       });
       return false;
     }
   };
 
-  // Handle video stream status changes
-  useEffect(() => {
-    if (!videoConnected && droneConnected) {
-      // If video stream is lost while drone was connected, check drone connection
-      enterSDKMode();
-    }
-  }, [videoConnected]);
-
   /**
    * Sends commands to the drone via HTTP API
-   * @param {string} command - The command to send to the drone
    */
   const sendCommand = async (command) => {
     try {
@@ -165,7 +163,7 @@ function App() {
       console.log('Command response:', data);
     } catch (error) {
       handleOperationError(`send command: ${command}`, error, () => {
-        setDroneConnected(false);
+        dispatch(setDroneConnection(false));
         enterSDKMode();
       });
     }
@@ -177,17 +175,17 @@ function App() {
   const toggleVideoStream = async () => {
     const command = streamEnabled ? 'streamoff' : 'streamon';
     try {
-        const response = await fetch(`/drone/${command}`);
-        if (!response.ok) throw new Error(`Failed to ${command}`);
-        
-        if (command === 'streamon' && !playerRef.current) {
-            initializePlayer();
-        } else if (playerRef.current) {
-            playerRef.current[command === 'streamoff' ? 'pause' : 'play']();
-        }
-        setStreamEnabled(!streamEnabled);
+      const response = await fetch(`/drone/${command}`);
+      if (!response.ok) throw new Error(`Failed to ${command}`);
+      
+      if (command === 'streamon' && !playerRef.current) {
+        initializePlayer();
+      } else if (playerRef.current) {
+        playerRef.current[command === 'streamoff' ? 'pause' : 'play']();
+      }
+      dispatch(setStreamEnabled(!streamEnabled));
     } catch (error) {
-        handleOperationError(`${command} video stream`, error);
+      handleOperationError(`${command} video stream`, error);
     }
   };
 
@@ -196,7 +194,7 @@ function App() {
    */
   const capturePhoto = async () => {
     if (!videoConnected) {
-      setError('Video stream not available');
+      dispatch(setError('Video stream not available'));
       return;
     }
 
@@ -221,25 +219,24 @@ function App() {
    */
   const toggleRecording = async () => {
     try {
-        const endpoint = isRecording ? '/stop-recording' : '/start-recording';
-        const response = await fetch(endpoint, { method: 'POST' });
-        
-        if (!response.ok) {
-            throw new Error(`Failed to ${isRecording ? 'stop' : 'start'} recording`);
-        }
-        
-        if (!isRecording) {
-            const files = await response.json();
-            setRecordingFiles(files);
-        } else {
-            setRecordingFiles(null);
-        }
-        setIsRecording(!isRecording);
+      const endpoint = isRecording ? '/stop-recording' : '/start-recording';
+      const response = await fetch(endpoint, { method: 'POST' });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to ${isRecording ? 'stop' : 'start'} recording`);
+      }
+      
+      if (!isRecording) {
+        const files = await response.json();
+        dispatch(setRecordingFiles(files));
+      } else {
+        dispatch(setRecordingFiles(null));
+      }
+      dispatch(setRecordingStatus(!isRecording));
     } catch (error) {
-        handleOperationError(isRecording ? 'stop recording' : 'start recording', error);
+      handleOperationError(isRecording ? 'stop recording' : 'start recording', error);
     }
   };
-
 
   return (
     <div className="container">
@@ -280,7 +277,7 @@ function App() {
         ></div>
       </div>
 
-      {/* Add media controls after video container */}
+      {/* Media controls */}
       <div className="media-controls">
         <button 
           onClick={capturePhoto}
@@ -333,7 +330,7 @@ function App() {
         </div>
       </div>
     </div>
-  )
+  );
 }
 
-export default App
+export default App;
