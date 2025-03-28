@@ -1599,3 +1599,159 @@ This architecture ensures:
 - Easy debugging
 - Scalable state management
 - Efficient component updates
+
+## Server State Management
+
+### Overview
+
+The application uses a singleton `ServerState` class to manage the server-side state, ensuring a single source of truth for all server operations.
+
+### Implementation Structure
+
+```javascript
+class ServerState {
+    constructor() {
+        // Drone state management
+        this.drone = {
+            connected: false,
+            lastCommand: '',
+            state: {
+                battery: null,
+                speed: null,
+                time: null,
+                lastUpdate: null
+            },
+            monitoringInterval: null
+        };
+
+        // Video streaming state
+        this.video = {
+            stream: {
+                active: false,
+                process: null
+            },
+            recording: {
+                active: false,
+                process: null,
+                filePath: null
+            }
+        };
+
+        // WebSocket client management
+        this.websocket = {
+            clients: new Set(),
+            nextClientId: 0
+        };
+    }
+}
+```
+
+### Key Features
+
+1. **Drone State Management**
+   - Connection status tracking
+   - Last command history
+   - Real-time drone metrics (battery, speed, flight time)
+   - Automatic state updates
+
+2. **Video Stream Management**
+   - Stream activity status
+   - FFmpeg process handling
+   - Recording state and file management
+   - Process lifecycle management
+
+3. **WebSocket Client Management**
+   - Client tracking using Set data structure
+   - Unique client ID assignment
+   - Active connection management
+   - Client cleanup on disconnection
+
+### Core Methods
+
+```javascript
+// Drone state methods
+setDroneConnection(status)
+setLastCommand(command)
+updateDroneState(key, value)
+setMonitoringInterval(interval)
+
+// Video state methods
+setVideoStreamState(active, process)
+setRecordingState(active, process, filePath)
+
+// WebSocket client methods
+addClient(ws)
+removeClient(ws)
+getConnectedClients()
+
+// State getters
+getDroneState()
+getVideoState()
+
+// Cleanup method
+cleanup()
+```
+
+### Singleton Pattern Implementation
+
+The server state is implemented as a singleton to ensure:
+- Single source of truth for all server operations
+- Consistent state across all components
+- Centralized state management
+- Proper resource cleanup
+
+```javascript
+// Singleton export
+export const serverState = new ServerState();
+export default serverState;
+```
+
+### Benefits
+
+1. **Centralized State Management**
+   - Single source of truth for server state
+   - Consistent state updates
+   - Simplified debugging
+   - Clear state flow
+
+2. **Resource Management**
+   - Automatic process cleanup
+   - Memory leak prevention
+   - Proper WebSocket connection handling
+   - Efficient resource allocation
+
+3. **Error Handling**
+   - Centralized error management
+   - Consistent error reporting
+   - Clean error states
+   - Proper resource cleanup on errors
+
+4. **Performance**
+   - Efficient client tracking
+   - Optimized state updates
+   - Memory-efficient operations
+   - Clean process management
+
+### Usage Example
+
+```javascript
+// Import the singleton instance
+import serverState from './state';
+
+// Update drone connection
+serverState.setDroneConnection(true);
+
+// Add new WebSocket client
+const clientId = serverState.addClient(websocket);
+
+// Update video stream state
+serverState.setVideoStreamState(true, ffmpegProcess);
+
+// Cleanup on server shutdown
+process.on('SIGINT', () => {
+    serverState.cleanup();
+    process.exit();
+});
+```
+
+This state management system ensures reliable operation of the drone control server while maintaining clean and efficient resource management.
