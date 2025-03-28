@@ -185,13 +185,6 @@ const DroneControl = () => {
   const handleLand = () => sendCommand('land');
   const handleEmergency = () => sendCommand('emergency');
 
-  // Speed control
-  const handleSpeedChange = async (newSpeed) => {
-    if (newSpeed >= 10 && newSpeed <= 100) {
-      setSpeed(newSpeed);
-      await sendCommand(`speed ${newSpeed}`);
-    }
-  };
 
   return (
     <>
@@ -368,7 +361,7 @@ const DroneControl = () => {
             <span className="text-white font-medium">
               Video: {videoConnected ? 'Connected' : 'Disconnected'}
             </span>
-            {droneConnected && (
+            {droneConnected || (
               <button 
                 onClick={toggleVideoStream}
                 className="ml-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
