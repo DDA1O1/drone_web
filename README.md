@@ -1363,7 +1363,7 @@ const heartbeat = setInterval(() => {
 }, 30000);
 ```
 
-### Key Features
+### Key  Features
 
 - IP-based connection tracking
 - Heartbeat mechanism
@@ -1372,7 +1372,7 @@ const heartbeat = setInterval(() => {
 - Automatic stale connection cleanup
 - More robust error handling
 
-### Ideal For
+### Ideal  For
 
 - Cloud-based drone control systems
 - Multiple machines accessing drones

@@ -78,7 +78,7 @@ function App() {
       playerRef.current = player.player;
 
       // Add error event listener to the WebSocket connection
-      if (player.player && player.player.source && player.player.source.socket) {
+      if (player?.player?.source?.socket) {
         player.player.source.socket.addEventListener('error', (error) => {
           console.error('WebSocket error:', error);
           handleOperationError('WebSocket connection', error);
@@ -95,7 +95,7 @@ function App() {
     
     
     return () => {
-        // Destroy player on component unmount
+        // Destroy player on component unmount you do not want to leave the player running and websocket open
         if (playerRef.current) {
             playerRef.current.destroy();
             playerRef.current = null;
@@ -240,13 +240,6 @@ function App() {
     }
   };
 
-  // Add useEffect to monitor state changes
-  useEffect(() => {
-    console.log('Video Connected:', videoConnected);
-    console.log('Drone Connected:', droneConnected);
-    console.log('Stream Enabled:', streamEnabled);
-    console.log('Is Recording:', isRecording);
-  }, [videoConnected, droneConnected, streamEnabled, isRecording]);
 
   return (
     <div className="container">
