@@ -1,3 +1,8 @@
+// primariily for IntelliSense
+// Go to definition
+// Auto-imports
+// Type checking in the editor(IDE)
+
 {
   "compilerOptions": {
     "baseUrl": ".",

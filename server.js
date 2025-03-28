@@ -7,29 +7,21 @@ import { dirname, join, basename } from 'path';
 import fs from 'fs';
 import serverState from './state.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const __filename = fileURLToPath(import.meta.url); // to get the whole path of the file
+const __dirname = dirname(__filename); // to get the directory name of the file
 
-// Simple error handling function
-function handleError(error, res = null) {
-    console.error(error.message || error);
-    if (res) {
-        const status = error.clientError ? 400 : 500;
-        res.status(status).send(error.message || 'Internal server error');
-    }
-    return false;
-}
 
-// Create separate folders for different media types
+
+// Create separate folders for different media types if they don't exist
 const createMediaFolders = () => {
     try {
-        const uploadsDir = join(__dirname, 'uploads');
-        const photosDir = join(uploadsDir, 'photos');
-        const mp4Dir = join(uploadsDir, 'mp4_recordings');
+        const uploadsDir = join(__dirname, 'uploads'); //create a folder called uploads in the same directory as the file
+        const photosDir = join(uploadsDir, 'photos'); //create a folder called photos in the uploads folder
+        const mp4Dir = join(uploadsDir, 'mp4_recordings'); //create a folder called mp4_recordings in the uploads folder
 
         [uploadsDir, photosDir, mp4Dir].forEach(dir => {
             if (!fs.existsSync(dir)) {
-                fs.mkdirSync(dir, { recursive: true, mode: 0o755 });
+                fs.mkdirSync(dir, { recursive: true, mode: 0o755 }); //create the folder if it doesn't exist
             }
         });
 
@@ -37,14 +29,14 @@ const createMediaFolders = () => {
         fs.writeFileSync(testFile, '');
         fs.unlinkSync(testFile);
 
-        return { uploadsDir, photosDir, mp4Dir };
+        return { uploadsDir, photosDir, mp4Dir }; // return the folders
     } catch (error) {
         console.error('Error creating media folders:', error);
         throw error;
     }
 };
 
-// Initialize folders with error handling
+// Initialize folders with error handling with global access
 let photosDir, mp4Dir;
 try {
     ({ photosDir, mp4Dir } = createMediaFolders());
@@ -55,17 +47,17 @@ try {
 
 // Initialize Express app
 const app = express();
-const port = 3000;
-const streamPort = 3001;
+const port = 3000; // express port to serve static files
+const streamPort = 3001; // websocket port
 
 // Configure middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json()); // parse json bodies in the request
+app.use(express.urlencoded({ extended: true })); // parse urlencoded bodies in the request
 
 // Tello drone configuration
-const TELLO_IP = '192.168.10.1';
-const TELLO_PORT = 8889;
-const TELLO_VIDEO_PORT = 11111;
+const TELLO_IP = '192.168.10.1'; // drone ip address
+const TELLO_PORT = 8889; // drone port
+const TELLO_VIDEO_PORT = 11111; // drone video port
 
 // Create UDP client for drone commands
 const droneClient = dgram.createSocket('udp4');
@@ -82,10 +74,10 @@ wss.on('listening', () => {
 });
 
 wss.on('error', (error) => {
-    handleError(new Error('WebSocket server error: ' + error.message));
+    console.error('WebSocket server error:', error.message);
 });
 
-wss.on('connection', (ws, req) => {
+wss.on('connection', (ws) => {
     try {
         const clientId = serverState.addClient(ws);
         console.log(`New client ${clientId} connected (Total: ${serverState.websocket.clients.size})`);
@@ -96,11 +88,11 @@ wss.on('connection', (ws, req) => {
         });
 
         ws.on('error', (error) => {
-            handleError(new Error(`Client ${clientId} error: ${error.message}`));
+            console.error(`Client ${clientId} error:`, error.message);
             serverState.removeClient(ws);
         });
     } catch (error) {
-        handleError(new Error('WebSocket connection error: ' + error.message));
+        console.error('WebSocket connection error:', error.message);
         ws.close(1011, 'Internal Server Error');
     }
 });
@@ -202,8 +194,7 @@ app.get('/drone/:command', async (req, res) => {
         } else if (command === 'streamon') {
             droneClient.send(command, 0, command.length, TELLO_PORT, TELLO_IP, (err) => {
                 if (err) {
-                    err.clientError = true;
-                    return handleError(err, res);
+                    return res.status(500).json({ error: err.message });
                 }
                 
                 try {
@@ -213,14 +204,13 @@ app.get('/drone/:command', async (req, res) => {
                     }
                     res.send('Command sent');
                 } catch (error) {
-                    return handleError(new Error('Error starting video stream'), res);
+                    return res.status(500).json({ error: 'Error starting video stream' });
                 }
             });
         } else if (command === 'streamoff') {
             droneClient.send(command, 0, command.length, TELLO_PORT, TELLO_IP, (err) => {
                 if (err) {
-                    err.clientError = true;
-                    return handleError(err, res);
+                    return res.status(500).json({ error: err.message });
                 }
                 
                 // Kill the ffmpeg process if it exists
@@ -234,14 +224,13 @@ app.get('/drone/:command', async (req, res) => {
             // Send other commands normally
             droneClient.send(command, 0, command.length, TELLO_PORT, TELLO_IP, (err) => {
                 if (err) {
-                    err.clientError = true;
-                    return handleError(err, res);
+                    return res.status(500).json({ error: err.message });
                 }
                 res.send('Command sent');
             });
         }
     } catch (error) {
-        return handleError(error, res);
+        res.status(500).json({ error: error.message });
     }
 });
 
@@ -309,7 +298,7 @@ function startFFmpeg() {
 
     // Handle process errors and exit
     ffmpeg.on('error', (error) => {
-        handleError(new Error('FFmpeg process error: ' + error.message));
+        console.error('FFmpeg process error:', error.message);
         if (serverState.video.stream.process === ffmpeg) {
             serverState.video.stream.process = null;
             if (serverState.lastCommand === 'streamon') {
@@ -416,19 +405,19 @@ function initializeMP4Process() {
             const message = data.toString().trim();
             if (message.toLowerCase().includes('error') || 
                 message.toLowerCase().includes('failed')) {
-                handleError(new Error(`MP4 FFmpeg: ${message}`));
+                console.error('MP4 FFmpeg:', message);
             }
         });
 
         serverState.video.recording.process.on('error', (err) => {
-            handleError(new Error('MP4 process error: ' + err.message));
+            console.error('MP4 process error:', err.message);
             serverState.video.recording.process = null;
             serverState.video.recording.filePath = null;
         });
 
         serverState.video.recording.process.on('exit', (code, signal) => {
             if (code !== 0) {
-                handleError(new Error(`MP4 process exited with code ${code}, signal: ${signal}`));
+                console.error(`MP4 process exited with code ${code}, signal: ${signal}`);
             }
             serverState.video.recording.process = null;
             serverState.video.recording.filePath = null;
@@ -436,7 +425,7 @@ function initializeMP4Process() {
 
         return serverState.video.recording.process;
     } catch (error) {
-        handleError(new Error('Failed to initialize MP4 process: ' + error.message));
+        console.error('Failed to initialize MP4 process:', error.message);
         serverState.video.recording.process = null;
         serverState.video.recording.filePath = null;
         return null;
@@ -446,9 +435,7 @@ function initializeMP4Process() {
 // Add route for saving video chunks
 app.post('/start-recording', (req, res) => {
     if (serverState.video.recording.active) {
-        const error = new Error('Recording already in progress');
-        error.clientError = true;
-        return handleError(error, res);
+        return res.status(400).json({ error: 'Recording already in progress' });
     }
 
     try {
@@ -457,22 +444,20 @@ app.post('/start-recording', (req, res) => {
         }
 
         if (!serverState.video.recording.process || !serverState.video.recording.process.stdin.writable) {
-            return handleError(new Error('Failed to initialize MP4 process'), res);
+            return res.status(500).json({ error: 'Failed to initialize MP4 process' });
         }
 
         serverState.video.recording.active = true;
         res.json({ mp4FileName: basename(serverState.video.recording.filePath) });
         
     } catch (error) {
-        return handleError(error, res);
+        res.status(500).json({ error: error.message });
     }
 });
 
 app.post('/stop-recording', async (req, res) => {
     if (!serverState.video.recording.active) {
-        const error = new Error('No active recording');
-        error.clientError = true;
-        return handleError(error, res);
+        return res.status(400).json({ error: 'No active recording' });
     }
 
     try {
@@ -506,7 +491,7 @@ app.post('/stop-recording', async (req, res) => {
         
         res.send('Recording stopped');
     } catch (error) {
-        return handleError(error, res);
+        res.status(500).json({ error: error.message });
     }
 });
 
@@ -528,7 +513,7 @@ const gracefulShutdown = async () => {
             });
         });
     } catch (err) {
-        handleError(new Error('Error sending emergency command: ' + err.message));
+        console.error('Error sending emergency command:', err.message);
     }
 
     droneClient.close();
