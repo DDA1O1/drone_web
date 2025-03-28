@@ -55,9 +55,15 @@ class ServerState {
         this.video.stream.process = process;
     }
 
-    setRecordingState(active, process = null, filePath = null) {
-        this.video.recording.active = active;
+    setVideoRecordingProcess(process = null) {
         this.video.recording.process = process;
+    }
+
+    setVideoRecordingActive(active) {
+        this.video.recording.active = active;
+    }
+
+    setVideoRecordingFilePath(filePath) {
         this.video.recording.filePath = filePath;
     }
 
@@ -84,6 +90,22 @@ class ServerState {
 
     getVideoState() {
         return this.video;
+    }
+
+    getLastCommand() {
+        return this.drone.lastCommand;
+    }
+
+    getVideoRecordingProcess() {
+        return this.video.recording.process;
+    }
+
+    getVideoRecordingActive() {
+        return this.video.recording.active;
+    }
+
+    getVideoRecordingFilePath() {
+        return this.video.recording.filePath;
     }
 
     // Cleanup method
