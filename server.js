@@ -5,7 +5,7 @@ import dgram from 'dgram';
 import { fileURLToPath } from 'url'; 
 import { dirname, join, basename } from 'path'; 
 import fs from 'fs';
-import serverState from './src/server/state.js';
+import serverState from './state.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);

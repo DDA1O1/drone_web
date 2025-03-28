@@ -16,8 +16,8 @@ import {
   setError,
   incrementRetryAttempts,
   resetRetryAttempts
-} from './store/slices/droneSlice'
-import './App.css'
+} from '@/store/slices/droneSlice'
+import '@/App.css'
 
 function App() {
   // Refs for managing video player and container
