@@ -253,6 +253,86 @@ const DroneControl = () => {
         </div>
       </div>
 
+      {/* Media Controls - Top Right */}
+      <div className="absolute top-4 right-4 z-30 flex items-center gap-3">
+        {/* Capture Photo Button */}
+        <button 
+          onClick={capturePhoto}
+          disabled={!videoConnected}
+          className={`group relative px-3 py-1.5 rounded-full flex items-center gap-2 ${
+            videoConnected 
+              ? 'bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/50' 
+              : 'bg-gray-500/20 border border-gray-500/30 cursor-not-allowed'
+          } backdrop-blur-sm transition-all duration-200`}
+        >
+          <svg 
+            xmlns="http://www.w3.org/2000/svg" 
+            className={`h-4 w-4 ${videoConnected ? 'text-emerald-400' : 'text-gray-400'}`}
+            fill="none" 
+            viewBox="0 0 24 24" 
+            stroke="currentColor"
+          >
+            <path 
+              strokeLinecap="round" 
+              strokeLinejoin="round" 
+              strokeWidth={2} 
+              d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
+            />
+            <path 
+              strokeLinecap="round" 
+              strokeLinejoin="round" 
+              strokeWidth={2} 
+              d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"
+            />
+          </svg>
+          <span className="text-sm font-medium text-white">Capture</span>
+        </button>
+
+        {/* Record Button */}
+        <button 
+          onClick={toggleRecording}
+          disabled={!videoConnected}
+          className={`group relative px-3 py-1.5 rounded-full flex items-center gap-2 ${
+            videoConnected
+              ? isRecording 
+                ? 'bg-red-500/20 hover:bg-red-500/30 border border-red-500/50' 
+                : 'bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/50'
+              : 'bg-gray-500/20 border border-gray-500/30 cursor-not-allowed'
+          } backdrop-blur-sm transition-all duration-200`}
+        >
+          <svg 
+            xmlns="http://www.w3.org/2000/svg" 
+            className={`h-4 w-4 ${
+              videoConnected 
+                ? isRecording ? 'text-red-400' : 'text-sky-400'
+                : 'text-gray-400'
+            }`}
+            fill="none" 
+            viewBox="0 0 24 24" 
+            stroke="currentColor"
+          >
+            {isRecording ? (
+              <path 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                strokeWidth={2} 
+                d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z M10 9v6m4-6v6"
+              />
+            ) : (
+              <path 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                strokeWidth={2} 
+                d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+              />
+            )}
+          </svg>
+          <span className="text-sm font-medium text-white">
+            {isRecording ? 'Stop' : 'Record'}
+          </span>
+        </button>
+      </div>
+
       {/* Takeoff/Land Controls - Top Left */}
       <div className="absolute top-8 left-8 z-30 flex gap-3">
         {/* Takeoff button */}
@@ -399,34 +479,6 @@ const DroneControl = () => {
               {error}
             </div>
           )}
-
-          {/* Media controls */}
-          <div className="grid grid-cols-2 gap-4">
-            <button 
-              onClick={capturePhoto}
-              disabled={!videoConnected}
-              className={`px-6 py-3 rounded-lg font-medium ${
-                videoConnected 
-                  ? 'bg-green-500/70 text-white hover:bg-green-600/70' 
-                  : 'bg-gray-500/70 text-gray-300 cursor-not-allowed'
-              } transition-colors`}
-            >
-              Capture Photo
-            </button>
-            <button 
-              onClick={toggleRecording}
-              disabled={!videoConnected}
-              className={`px-6 py-3 rounded-lg font-medium ${
-                videoConnected
-                  ? isRecording 
-                    ? 'bg-red-500/70 text-white hover:bg-red-600/70'
-                    : 'bg-blue-500/70 text-white hover:bg-blue-600/70'
-                  : 'bg-gray-500/70 text-gray-300 cursor-not-allowed'
-              } transition-colors`}
-            >
-              {isRecording ? 'Stop Recording' : 'Start Recording'}
-            </button>
-          </div>
         </div>
 
         {/* Recording files list */}
