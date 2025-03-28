@@ -1,12 +1,59 @@
 import { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { setError } from '@/store/slices/droneSlice';
+import { 
+  setError, 
+  setDroneConnection, 
+  setStreamEnabled, 
+  setRecordingStatus, 
+  setRecordingFiles,
+  incrementRetryAttempts,
+  resetRetryAttempts
+} from '@/store/slices/droneSlice';
 
 const DroneControl = () => {
   const dispatch = useDispatch();
-  const { droneConnected } = useSelector(state => state.drone);
-  const [speed, setSpeed] = useState(10); // Default speed 10 cm/s
+  const { 
+    droneConnected,
+    videoConnected,
+    streamEnabled,
+    isRecording,
+    recordingFiles,
+    error,
+    retryAttempts 
+  } = useSelector(state => state.drone);
   const [activeKeys, setActiveKeys] = useState(new Set());
+
+  // Constants
+  const MAX_SDK_RETRY_ATTEMPTS = 5;
+
+  // ==== LIFE CYCLE MANAGEMENT ====
+  const enterSDKMode = async () => {
+    if (retryAttempts >= MAX_SDK_RETRY_ATTEMPTS) {
+      dispatch(setError('Failed to connect to drone after maximum retry attempts'));
+      return false;
+    }
+
+    try {
+      const response = await fetch('/drone/command');
+      const data = await response.json();
+      const success = data.status === 'connected';
+      
+      if (success) {
+        dispatch(setDroneConnection(true));
+        dispatch(setError(null));
+        dispatch(resetRetryAttempts());
+      } else {
+        dispatch(setError(`Connection failed: ${data.response}`));
+        dispatch(incrementRetryAttempts());
+      }
+      return success;
+    } catch (error) {
+      console.error(error);
+      dispatch(setError(error.message));
+      dispatch(incrementRetryAttempts());
+      return false;
+    }
+  };
 
   // Basic command sender
   const sendCommand = async (command) => {
@@ -28,7 +75,65 @@ const DroneControl = () => {
     }
   };
 
-  // Keyboard controls
+  // ==== VIDEO CONTROLS ====
+  const toggleVideoStream = async () => {
+    const command = streamEnabled ? 'streamoff' : 'streamon';
+    try {
+      const response = await fetch(`/drone/${command}`);
+      if (!response.ok) throw new Error(`Failed to ${command}`);
+      dispatch(setStreamEnabled(!streamEnabled));
+    } catch (error) {
+      console.error(error);
+      dispatch(setError(error.message));
+    }
+  };
+
+  const capturePhoto = async () => {
+    if (!videoConnected) {
+      dispatch(setError('Video stream not available'));
+      return;
+    }
+
+    try {
+      const response = await fetch('/capture-photo', {
+        method: 'POST'
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to capture photo`);
+      }
+
+      const data = await response.json();
+      console.log('Photo captured:', data.fileName);
+    } catch (error) {
+      console.error(error);
+      dispatch(setError(error.message));
+    }
+  };
+
+  const toggleRecording = async () => {
+    try {
+      const endpoint = isRecording ? '/stop-recording' : '/start-recording';
+      const response = await fetch(endpoint, { method: 'POST' });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to ${isRecording ? 'stop' : 'start'} recording`);
+      }
+      
+      if (!isRecording) {
+        const files = await response.json();
+        dispatch(setRecordingFiles(files));
+      } else {
+        dispatch(setRecordingFiles(null));
+      }
+      dispatch(setRecordingStatus(!isRecording));
+    } catch (error) {
+      console.error(error);
+      dispatch(setError(error.message));
+    }
+  };
+
+  // ==== KEYBOARD CONTROLS ====
   useEffect(() => {
     const handleKeyDown = (e) => {
       const validKeys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 'a', 's', 'd', 'q', 'e'];
@@ -90,22 +195,50 @@ const DroneControl = () => {
 
   return (
     <>
+      {/* Connection status and connect button - centered top */}
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2">
+        <div className={`h-2 w-2 rounded-full ${droneConnected ? 'bg-green-500' : 'bg-red-500'} animate-pulse`} />
+        {!droneConnected && (
+          <button 
+            onClick={enterSDKMode}
+            className="px-3 py-1.5 bg-white/10 backdrop-blur-sm text-white text-sm font-medium rounded-full 
+                     hover:bg-white/20 transition-all duration-200 flex items-center gap-2 group"
+          >
+            <svg 
+              xmlns="http://www.w3.org/2000/svg" 
+              className="h-4 w-4 transition-transform group-hover:rotate-180" 
+              fill="none" 
+              viewBox="0 0 24 24" 
+              stroke="currentColor"
+            >
+              <path 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                strokeWidth={2} 
+                d="M13 10V3L4 14h7v7l9-11h-7z"
+              />
+            </svg>
+            Connect Drone
+          </button>
+        )}
+      </div>
+
       {/* Takeoff/Land Controls - Top Left */}
-      <div className="absolute top-8 left-8 z-30 flex gap-4">
+      <div className="absolute top-8 left-8 z-30 flex gap-3">
         {/* Takeoff button */}
         <button
           onClick={handleTakeoff}
           disabled={!droneConnected}
-          className={`group relative p-3 rounded-full ${
+          className={`group relative p-2.5 rounded-lg ${
             droneConnected 
-              ? 'bg-gradient-to-br from-green-400 to-green-500 hover:from-green-500 hover:to-green-600 ring-2 ring-green-400/50' 
-              : 'bg-gray-500/50 cursor-not-allowed'
-          } transition-all duration-200 hover:scale-105 shadow-lg hover:shadow-green-500/25`}
+              ? 'bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/50' 
+              : 'bg-gray-500/20 border border-gray-500/30 cursor-not-allowed'
+          } backdrop-blur-sm transition-all duration-200 hover:scale-105`}
           title="Takeoff"
         >
           <svg 
             xmlns="http://www.w3.org/2000/svg" 
-            className="h-5 w-5 text-white drop-shadow" 
+            className={`h-5 w-5 ${droneConnected ? 'text-emerald-400' : 'text-gray-400'}`}
             fill="none" 
             viewBox="0 0 24 24" 
             stroke="currentColor"
@@ -113,7 +246,7 @@ const DroneControl = () => {
             <path 
               strokeLinecap="round" 
               strokeLinejoin="round" 
-              strokeWidth={2.5} 
+              strokeWidth={2} 
               d="M5 10l7-7m0 0l7 7m-7-7v18" 
             />
           </svg>
@@ -126,16 +259,16 @@ const DroneControl = () => {
         <button
           onClick={handleLand}
           disabled={!droneConnected}
-          className={`group relative p-3 rounded-full ${
+          className={`group relative p-2.5 rounded-lg ${
             droneConnected 
-              ? 'bg-gradient-to-br from-gray-100 to-white hover:from-white hover:to-gray-100 ring-2 ring-gray-200' 
-              : 'bg-gray-500/50 cursor-not-allowed'
-          } transition-all duration-200 hover:scale-105 shadow-lg hover:shadow-gray-200/50`}
+              ? 'bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/50' 
+              : 'bg-gray-500/20 border border-gray-500/30 cursor-not-allowed'
+          } backdrop-blur-sm transition-all duration-200 hover:scale-105`}
           title="Land"
         >
           <svg 
             xmlns="http://www.w3.org/2000/svg" 
-            className="h-5 w-5 text-gray-700" 
+            className={`h-5 w-5 ${droneConnected ? 'text-sky-400' : 'text-gray-400'}`}
             fill="none" 
             viewBox="0 0 24 24" 
             stroke="currentColor"
@@ -143,7 +276,7 @@ const DroneControl = () => {
             <path 
               strokeLinecap="round" 
               strokeLinejoin="round" 
-              strokeWidth={2.5} 
+              strokeWidth={2} 
               d="M19 14l-7 7m0 0l-7-7m7 7V3" 
             />
           </svg>
@@ -156,16 +289,16 @@ const DroneControl = () => {
         <button
           onClick={handleEmergency}
           disabled={!droneConnected}
-          className={`group relative p-3 rounded-full ${
+          className={`group relative p-2.5 rounded-lg ${
             droneConnected 
-              ? 'bg-gradient-to-br from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 ring-2 ring-red-500/50 animate-pulse' 
-              : 'bg-gray-500/50 cursor-not-allowed'
-          } transition-all duration-200 hover:scale-105 shadow-lg hover:shadow-red-500/25`}
+              ? 'bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 animate-pulse' 
+              : 'bg-gray-500/20 border border-gray-500/30 cursor-not-allowed'
+          } backdrop-blur-sm transition-all duration-200 hover:scale-105`}
           title="Emergency Stop"
         >
           <svg 
             xmlns="http://www.w3.org/2000/svg" 
-            className="h-5 w-5 text-white drop-shadow" 
+            className={`h-5 w-5 ${droneConnected ? 'text-red-400' : 'text-gray-400'}`}
             fill="none" 
             viewBox="0 0 24 24" 
             stroke="currentColor"
@@ -173,7 +306,7 @@ const DroneControl = () => {
             <path 
               strokeLinecap="round" 
               strokeLinejoin="round" 
-              strokeWidth={3} 
+              strokeWidth={2.5} 
               d="M6 18L18 6M6 6l12 12" 
             />
           </svg>
@@ -225,6 +358,82 @@ const DroneControl = () => {
             <p>Rotate Left / Right</p>
           </div>
         </div>
+      </div>
+
+      {/* Connection status and media controls */}
+      <div className="absolute top-0 right-0 m-4 z-30">
+        <div className="space-y-4">
+          {/* Video status */}
+          <div className={`p-4 rounded-lg ${videoConnected ? 'bg-green-500/70' : 'bg-red-500/70'}`}>
+            <span className="text-white font-medium">
+              Video: {videoConnected ? 'Connected' : 'Disconnected'}
+            </span>
+            {droneConnected && (
+              <button 
+                onClick={toggleVideoStream}
+                className="ml-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+              >
+                {streamEnabled ? 'Stop Video' : 'Start Video'}
+              </button>
+            )}
+          </div>
+
+          {/* Error display */}
+          {error && (
+            <div className="p-4 bg-red-500/70 text-white rounded-lg">
+              {error}
+            </div>
+          )}
+
+          {/* Media controls */}
+          <div className="grid grid-cols-2 gap-4">
+            <button 
+              onClick={capturePhoto}
+              disabled={!videoConnected}
+              className={`px-6 py-3 rounded-lg font-medium ${
+                videoConnected 
+                  ? 'bg-green-500/70 text-white hover:bg-green-600/70' 
+                  : 'bg-gray-500/70 text-gray-300 cursor-not-allowed'
+              } transition-colors`}
+            >
+              Capture Photo
+            </button>
+            <button 
+              onClick={toggleRecording}
+              disabled={!videoConnected}
+              className={`px-6 py-3 rounded-lg font-medium ${
+                videoConnected
+                  ? isRecording 
+                    ? 'bg-red-500/70 text-white hover:bg-red-600/70'
+                    : 'bg-blue-500/70 text-white hover:bg-blue-600/70'
+                  : 'bg-gray-500/70 text-gray-300 cursor-not-allowed'
+              } transition-colors`}
+            >
+              {isRecording ? 'Stop Recording' : 'Start Recording'}
+            </button>
+          </div>
+        </div>
+
+        {/* Recording files list */}
+        {recordingFiles && recordingFiles.length > 0 && (
+          <div className="mt-8">
+            <h2 className="text-xl font-semibold mb-4 text-white">Recording Files</h2>
+            <ul className="space-y-2">
+              {recordingFiles.map((file, index) => (
+                <li key={index} className="p-3 bg-black/70 rounded flex items-center justify-between">
+                  <span className="text-white">{file}</span>
+                  <a 
+                    href={`/recordings/${file}`} 
+                    download
+                    className="text-blue-400 hover:text-blue-300"
+                  >
+                    Download
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     </>
   );
