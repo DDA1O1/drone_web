@@ -68,7 +68,7 @@ const JSMpegVideoPlayer = ({ onError }) => {
   const getPlayer = () => playerRef.current;
 
   return (
-    <div className="w-full aspect-video bg-black rounded-lg overflow-hidden">
+    <div className="fixed inset-0 w-screen h-screen bg-black">
       <div 
         ref={videoRef} 
         className="w-full h-full"

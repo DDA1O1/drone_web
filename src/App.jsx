@@ -156,95 +156,94 @@ function App() {
   };
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-4xl">
-      <h1 className="text-3xl font-bold text-center mb-8 text-gray-800">Tello Drone Control</h1>
+    <div className="relative">
+      {/* Video player component - render first to be in background */}
+      <JSMpegVideoPlayer onError={(error) => dispatch(setError(error))} />
       
-      {/* Connection status indicators */}
-      <div className="space-y-4 mb-8">
-        <div className={`p-4 rounded-lg flex items-center justify-between ${droneConnected ? 'bg-green-100' : 'bg-red-100'}`}>
-          <span className={`font-medium ${droneConnected ? 'text-green-700' : 'text-red-700'}`}>
-            Drone: {droneConnected ? 'Connected' : 'Disconnected'}
-          </span>
-          {!droneConnected && (
-            <button 
-              onClick={enterSDKMode}
-              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
-            >
-              Connect Drone
-            </button>
-          )}
+      {/* Controls overlay */}
+      <div className="relative z-10 container mx-auto px-4 py-8 max-w-4xl">
+        <h1 className="text-3xl font-bold text-center mb-8 text-white">Tello Drone Control</h1>
+        
+        {/* Connection status indicators */}
+        <div className="space-y-4 mb-8">
+          <div className={`p-4 rounded-lg flex items-center justify-between ${droneConnected ? 'bg-green-100' : 'bg-red-100'}`}>
+            <span className={`font-medium ${droneConnected ? 'text-green-700' : 'text-red-700'}`}>
+              Drone: {droneConnected ? 'Connected' : 'Disconnected'}
+            </span>
+            {!droneConnected && (
+              <button 
+                onClick={enterSDKMode}
+                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+              >
+                Connect Drone
+              </button>
+            )}
+          </div>
+          <div className={`p-4 rounded-lg flex items-center justify-between ${videoConnected ? 'bg-green-100' : 'bg-red-100'}`}>
+            <span className={`font-medium ${videoConnected ? 'text-green-700' : 'text-red-700'}`}>
+              Video: {videoConnected ? 'Connected' : 'Disconnected'}
+            </span>
+            {droneConnected && (
+              <button 
+                onClick={toggleVideoStream}
+                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+              >
+                {streamEnabled ? 'Stop Video' : 'Start Video'}
+              </button>
+            )}
+          </div>
+          {error && <div className="p-4 bg-red-100 text-red-700 rounded-lg">{error}</div>}
         </div>
-        <div className={`p-4 rounded-lg flex items-center justify-between ${videoConnected ? 'bg-green-100' : 'bg-red-100'}`}>
-          <span className={`font-medium ${videoConnected ? 'text-green-700' : 'text-red-700'}`}>
-            Video: {videoConnected ? 'Connected' : 'Disconnected'}
-          </span>
-          {droneConnected && (
-            <button 
-              onClick={toggleVideoStream}
-              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
-            >
-              {streamEnabled ? 'Stop Video' : 'Start Video'}
-            </button>
-          )}
-        </div>
-        {error && <div className="p-4 bg-red-100 text-red-700 rounded-lg">{error}</div>}
-      </div>
-      
-      {/* Video player component */}
-      {streamEnabled && (
-        <div className="mb-8">
-          <JSMpegVideoPlayer onError={(error) => dispatch(setError(error))} />
-        </div>
-      )}
 
-      {/* Media controls */}
-      <div className="grid grid-cols-2 gap-4">
-        <button 
-          onClick={capturePhoto}
-          disabled={!videoConnected}
-          className={`px-6 py-3 rounded-lg font-medium ${
-            videoConnected 
-              ? 'bg-green-500 text-white hover:bg-green-600' 
-              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-          } transition-colors`}
-        >
-          Capture Photo
-        </button>
-        <button 
-          onClick={toggleRecording}
-          disabled={!videoConnected}
-          className={`px-6 py-3 rounded-lg font-medium ${
-            videoConnected
-              ? isRecording 
-                ? 'bg-red-500 text-white hover:bg-red-600'
-                : 'bg-blue-500 text-white hover:bg-blue-600'
-              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-          } transition-colors`}
-        >
-          {isRecording ? 'Stop Recording' : 'Start Recording'}
-        </button>
-      </div>
-      
-      {/* Recording files list */}
-      {recordingFiles && recordingFiles.length > 0 && (
-        <div className="mt-8">
-          <h2 className="text-xl font-semibold mb-4">Recording Files</h2>
-          <ul className="space-y-2">
-            {recordingFiles.map((file, index) => (
-              <li key={index} className="p-3 bg-gray-100 rounded flex items-center justify-between">
-                <span className="text-gray-700">{file}</span>
-                <a 
-                  href={`/recordings/${file}`} 
-                  download
-                  className="text-blue-500 hover:text-blue-600"
-                >
-                  Download
-                </a>
-              </li>
-            ))}
-          </ul>
+        {/* Media controls */}
+        <div className="grid grid-cols-2 gap-4">
+          <button 
+            onClick={capturePhoto}
+            disabled={!videoConnected}
+            className={`px-6 py-3 rounded-lg font-medium ${
+              videoConnected 
+                ? 'bg-green-500 text-white hover:bg-green-600' 
+                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+            } transition-colors`}
+          >
+            Capture Photo
+          </button>
+          <button 
+            onClick={toggleRecording}
+            disabled={!videoConnected}
+            className={`px-6 py-3 rounded-lg font-medium ${
+              videoConnected
+                ? isRecording 
+                  ? 'bg-red-500 text-white hover:bg-red-600'
+                  : 'bg-blue-500 text-white hover:bg-blue-600'
+                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+            } transition-colors`}
+          >
+            {isRecording ? 'Stop Recording' : 'Start Recording'}
+          </button>
         </div>
-      )}
+        
+        {/* Recording files list */}
+        {recordingFiles && recordingFiles.length > 0 && (
+          <div className="mt-8">
+            <h2 className="text-xl font-semibold mb-4 text-white">Recording Files</h2>
+            <ul className="space-y-2">
+              {recordingFiles.map((file, index) => (
+                <li key={index} className="p-3 bg-gray-100 rounded flex items-center justify-between">
+                  <span className="text-gray-700">{file}</span>
+                  <a 
+                    href={`/recordings/${file}`} 
+                    download
+                    className="text-blue-500 hover:text-blue-600"
+                  >
+                    Download
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

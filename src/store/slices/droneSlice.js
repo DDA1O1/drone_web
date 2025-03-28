@@ -1,9 +1,9 @@
 import { createSlice } from '@reduxjs/toolkit';
 
 const initialState = {
-  droneConnected: false,
-  videoConnected: false,
-  streamEnabled: false,
+  droneConnected: true,
+  videoConnected: true,
+  streamEnabled: true,
   isRecording: false,
   recordingFiles: null,
   error: null,
