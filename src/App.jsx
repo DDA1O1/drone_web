@@ -1,15 +1,12 @@
 /**
  * Tello Drone Control Interface
  * This component handles the video streaming and control interface for the Tello drone.
- * It uses JSMpeg for video decoding and WebSocket for real-time communication.
  */
 
-import { useEffect, useRef } from 'react'
+import { useRef } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import JSMpeg from '@cycjimmy/jsmpeg-player'
 import {
   setDroneConnection,
-  setVideoConnection,
   setStreamEnabled,
   setRecordingStatus,
   setRecordingFiles,
@@ -17,11 +14,11 @@ import {
   incrementRetryAttempts,
   resetRetryAttempts
 } from '@/store/slices/droneSlice'
+import JSMpegVideoPlayer from '@/components/JSMpegVideoPlayer'
 import '@/App.css'
 
 function App() {
-  // Refs for managing video player and container
-  const videoRef = useRef(null);
+  // Refs for managing video player
   const playerRef = useRef(null);
   
   // Redux
@@ -48,80 +45,7 @@ function App() {
     }
   };
 
-  /**
-   * Initializes the JSMpeg video player with optimized settings
-   */
-  const initializePlayer = () => {
-    if (!videoRef.current || playerRef.current) return;
-    
-    try {
-      const url = `ws://${window.location.hostname}:3001`;
-      const player = new JSMpeg.VideoElement(videoRef.current, url, {
-        videoWidth: 640,
-        videoHeight: 480,
-        videoBufferSize: 512 * 1024,
-        streaming: true,
-        autoplay: true,
-        decodeFirstFrame: true,
-        chunkSize: 4096,
-        disableGl: false,
-        progressive: true,
-        throttled: false,
-        
-        hooks: {
-          play: () => {
-            console.log('Video playback started');
-            dispatch(setVideoConnection(true));
-          },
-          pause: () => dispatch(setVideoConnection(false)),
-          stop: () => dispatch(setVideoConnection(false)),
-          error: (error) => {
-            console.error('JSMpeg error:', error);
-            handleOperationError('connect to video stream', error);
-          }
-        }
-      });
-      
-      playerRef.current = player.player;
-
-      if (player?.player?.source?.socket) {
-        player.player.source.socket.addEventListener('error', (error) => {
-          console.error('WebSocket error:', error);
-          handleOperationError('WebSocket connection', error);
-        });
-      }
-
-    } catch (err) {
-      handleOperationError('initialize video', err);
-    }
-  };
-
   // ==== LIFE CYCLE MANAGEMENT ====
-  useEffect(() => {
-    return () => {
-      if (playerRef.current) {
-        playerRef.current.destroy();
-        playerRef.current = null;
-      }
-      
-      dispatch(setVideoConnection(false));
-      dispatch(setDroneConnection(false));
-      dispatch(setStreamEnabled(false));
-      dispatch(setError(null));
-      dispatch(resetRetryAttempts());
-    };
-  }, [dispatch]);
-
-  // Handle video stream status changes
-  useEffect(() => {
-    if (!videoConnected && droneConnected) {
-      enterSDKMode();
-    }
-  }, [videoConnected, droneConnected]);
-
-  /**
-   * Attempts to enter SDK mode with limited retries
-   */
   const enterSDKMode = async () => {
     if (retryAttempts >= MAX_SDK_RETRY_ATTEMPTS) {
       dispatch(setError('Failed to connect to drone after maximum retry attempts'));
@@ -177,12 +101,6 @@ function App() {
     try {
       const response = await fetch(`/drone/${command}`);
       if (!response.ok) throw new Error(`Failed to ${command}`);
-      
-      if (command === 'streamon' && !playerRef.current) {
-        initializePlayer();
-      } else if (playerRef.current) {
-        playerRef.current[command === 'streamoff' ? 'pause' : 'play']();
-      }
       dispatch(setStreamEnabled(!streamEnabled));
     } catch (error) {
       handleOperationError(`${command} video stream`, error);
@@ -269,13 +187,10 @@ function App() {
         {error && <div className="error">{error}</div>}
       </div>
       
-      {/* Video stream container */}
-      <div className="video-container">
-        <div 
-          ref={videoRef} 
-          className="jsmpeg-player"
-        ></div>
-      </div>
+      {/* Video player component */}
+      {streamEnabled && (
+        <JSMpegVideoPlayer onError={(error) => dispatch(setError(error))} />
+      )}
 
       {/* Media controls */}
       <div className="media-controls">
