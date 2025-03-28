@@ -14,11 +14,13 @@
   "dependencies": {
     "@cycjimmy/jsmpeg-player": "^6.1.2",
     "@reduxjs/toolkit": "^2.6.1",
+    "@tailwindcss/vite": "^4.0.17",
     "express": "^4.18.2",
     "mp4frag": "^0.7.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-redux": "^9.2.0",
+    "tailwindcss": "^4.0.17",
     "ws": "^8.14.2"
   },
   "devDependencies": {

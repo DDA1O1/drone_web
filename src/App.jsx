@@ -15,7 +15,6 @@ import {
   resetRetryAttempts
 } from '@/store/slices/droneSlice'
 import JSMpegVideoPlayer from '@/components/JSMpegVideoPlayer'
-import '@/App.css'
 
 function App() {
   // Refs for managing video player
@@ -157,93 +156,95 @@ function App() {
   };
 
   return (
-    <div className="container">
-      <h1>Tello Drone Control</h1>
+    <div className="container mx-auto px-4 py-8 max-w-4xl">
+      <h1 className="text-3xl font-bold text-center mb-8 text-gray-800">Tello Drone Control</h1>
       
       {/* Connection status indicators */}
-      <div className="status-container">
-        <div className={`status ${droneConnected ? 'connected' : 'disconnected'}`}>
-          Drone: {droneConnected ? 'Connected' : 'Disconnected'}
+      <div className="space-y-4 mb-8">
+        <div className={`p-4 rounded-lg flex items-center justify-between ${droneConnected ? 'bg-green-100' : 'bg-red-100'}`}>
+          <span className={`font-medium ${droneConnected ? 'text-green-700' : 'text-red-700'}`}>
+            Drone: {droneConnected ? 'Connected' : 'Disconnected'}
+          </span>
           {!droneConnected && (
             <button 
               onClick={enterSDKMode}
-              className="connect-btn"
+              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
             >
               Connect Drone
             </button>
           )}
         </div>
-        <div className={`status ${videoConnected ? 'connected' : 'disconnected'}`}>
-          Video: {videoConnected ? 'Connected' : 'Disconnected'}
+        <div className={`p-4 rounded-lg flex items-center justify-between ${videoConnected ? 'bg-green-100' : 'bg-red-100'}`}>
+          <span className={`font-medium ${videoConnected ? 'text-green-700' : 'text-red-700'}`}>
+            Video: {videoConnected ? 'Connected' : 'Disconnected'}
+          </span>
           {droneConnected && (
             <button 
               onClick={toggleVideoStream}
-              className="connect-btn"
+              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
             >
               {streamEnabled ? 'Stop Video' : 'Start Video'}
             </button>
           )}
         </div>
-        {error && <div className="error">{error}</div>}
+        {error && <div className="p-4 bg-red-100 text-red-700 rounded-lg">{error}</div>}
       </div>
       
       {/* Video player component */}
       {streamEnabled && (
-        <JSMpegVideoPlayer onError={(error) => dispatch(setError(error))} />
+        <div className="mb-8">
+          <JSMpegVideoPlayer onError={(error) => dispatch(setError(error))} />
+        </div>
       )}
 
       {/* Media controls */}
-      <div className="media-controls">
+      <div className="grid grid-cols-2 gap-4">
         <button 
           onClick={capturePhoto}
           disabled={!videoConnected}
-          className="media-btn"
+          className={`px-6 py-3 rounded-lg font-medium ${
+            videoConnected 
+              ? 'bg-green-500 text-white hover:bg-green-600' 
+              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+          } transition-colors`}
         >
-          Take Photo
+          Capture Photo
         </button>
         <button 
           onClick={toggleRecording}
           disabled={!videoConnected}
-          className={`media-btn ${isRecording ? 'recording' : ''}`}
+          className={`px-6 py-3 rounded-lg font-medium ${
+            videoConnected
+              ? isRecording 
+                ? 'bg-red-500 text-white hover:bg-red-600'
+                : 'bg-blue-500 text-white hover:bg-blue-600'
+              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+          } transition-colors`}
         >
           {isRecording ? 'Stop Recording' : 'Start Recording'}
         </button>
-        {isRecording && (
-          <span className="recording-info">
-            Recording in progress... (Saving as MP4)
-          </span>
-        )}
       </div>
-
-      {/* Drone control interface */}
-      <div className="controls">
-        {/* Basic flight controls */}
-        <div className="control-row">
-          <button onClick={() => sendCommand('takeoff')}>Take Off</button>
-          <button onClick={() => sendCommand('land')}>Land</button>
-          <button className="emergency" onClick={() => sendCommand('emergency')}>Emergency Stop</button>
+      
+      {/* Recording files list */}
+      {recordingFiles && recordingFiles.length > 0 && (
+        <div className="mt-8">
+          <h2 className="text-xl font-semibold mb-4">Recording Files</h2>
+          <ul className="space-y-2">
+            {recordingFiles.map((file, index) => (
+              <li key={index} className="p-3 bg-gray-100 rounded flex items-center justify-between">
+                <span className="text-gray-700">{file}</span>
+                <a 
+                  href={`/recordings/${file}`} 
+                  download
+                  className="text-blue-500 hover:text-blue-600"
+                >
+                  Download
+                </a>
+              </li>
+            ))}
+          </ul>
         </div>
-
-        {/* Vertical movement controls */}
-        <div className="control-row">
-          <button onClick={() => sendCommand('up 20')}>Up</button>
-          <button onClick={() => sendCommand('down 20')}>Down</button>
-        </div>
-
-        {/* Horizontal movement controls */}
-        <div className="control-row">
-          <button onClick={() => sendCommand('left 20')}>Left</button>
-          <button onClick={() => sendCommand('forward 20')}>Forward</button>
-          <button onClick={() => sendCommand('back 20')}>Back</button>
-          <button onClick={() => sendCommand('right 20')}>Right</button>
-        </div>
-
-        {/* Rotation controls */}
-        <div className="control-row">
-          <button onClick={() => sendCommand('ccw 45')}>Rotate Left</button>
-          <button onClick={() => sendCommand('cw 45')}>Rotate Right</button>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

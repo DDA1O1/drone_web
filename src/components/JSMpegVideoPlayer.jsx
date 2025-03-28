@@ -2,7 +2,6 @@ import { useEffect, useRef } from 'react';
 import { useDispatch } from 'react-redux';
 import JSMpeg from '@cycjimmy/jsmpeg-player';
 import { setVideoConnection } from '@/store/slices/droneSlice';
-import './JSMpegVideoPlayer.css';
 
 const JSMpegVideoPlayer = ({ onError }) => {
   const videoRef = useRef(null);
@@ -69,10 +68,10 @@ const JSMpegVideoPlayer = ({ onError }) => {
   const getPlayer = () => playerRef.current;
 
   return (
-    <div className="video-container">
+    <div className="w-full aspect-video bg-black rounded-lg overflow-hidden">
       <div 
         ref={videoRef} 
-        className="jsmpeg-player"
+        className="w-full h-full"
       ></div>
     </div>
   );
