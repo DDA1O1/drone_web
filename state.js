@@ -26,8 +26,8 @@ class ServerState {
         };
 
         this.websocket = {
-            clients: new Set(),
-            nextClientId: 0
+            clients: new Set(), // unique clients
+            nextClientId: 1
         };
     }
 
@@ -63,7 +63,7 @@ class ServerState {
 
     // WebSocket client methods
     addClient(ws) {
-        ws.clientId = this.websocket.nextClientId++;
+        ws.clientId = this.websocket.nextClientId++; // use 1 then increment to 2 post increment operator (X++)
         this.websocket.clients.add(ws);
         return ws.clientId;
     }
@@ -111,6 +111,6 @@ class ServerState {
     }
 }
 
-// Create and export a singleton instance
+// Create and export a singleton instance for single source of truth
 export const serverState = new ServerState();
 export default serverState; 

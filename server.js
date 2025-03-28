@@ -125,7 +125,7 @@ droneClient.on('message', (msg) => {
         const response = msg.toString().trim();
         
         // Update state based on response
-        if (!isNaN(response)) {
+        if (!isNaN(response)) { // is a Number
             serverState.updateDroneState('battery', parseInt(response));
         } else if (response.includes('cm/s')) {
             serverState.updateDroneState('speed', response);
@@ -133,7 +133,7 @@ droneClient.on('message', (msg) => {
             serverState.updateDroneState('time', response);
         }
         
-        // Broadcast to all connected clients
+        // Broadcast to all connected clients since WebSocket can only transmit data in either string format or binary format
         const update = JSON.stringify({
             type: 'droneState',
             value: serverState.getDroneState(),
@@ -150,33 +150,6 @@ droneClient.on('message', (msg) => {
     }
 });
 
-// Simplified drone response handler
-async function getDroneResponse(command, updateLastCommand = true) {
-    if (updateLastCommand) {
-        serverState.setLastCommand(command);
-    }
-    
-    return new Promise((resolve, reject) => {
-        const messageHandler = (msg) => {
-            droneClient.removeListener('message', messageHandler);
-            resolve(msg.toString().trim());
-        };
-        
-        droneClient.once('message', messageHandler);
-        
-        setTimeout(() => {
-            droneClient.removeListener('message', messageHandler);
-            reject(new Error('Drone not responding'));
-        }, 5000);
-        
-        droneClient.send(command, 0, command.length, TELLO_PORT, TELLO_IP, (err) => {
-            if (err) {
-                droneClient.removeListener('message', messageHandler);
-                reject(err);
-            }
-        });
-    });
-}
 
 // Add route for drone commands
 app.get('/drone/:command', async (req, res) => {
@@ -185,9 +158,14 @@ app.get('/drone/:command', async (req, res) => {
         
         if (command === 'command') {
             try {
-                const response = await getDroneResponse(command, false);
-                startDroneMonitoring();
-                res.json({ status: response === 'ok' ? 'connected' : 'failed', response });
+                droneClient.send('command', 0, 7, TELLO_PORT, TELLO_IP, (err) => {
+                    if (err) throw err;
+                    droneClient.once('message', (msg) => {
+                        const response = msg.toString().trim();
+                        startDroneMonitoring();
+                        res.json({ status: response === 'ok' ? 'connected' : 'failed', response });
+                    });
+                });
             } catch (error) {
                 res.json({ status: 'failed', response: error.message });
             }
@@ -241,7 +219,7 @@ function startFFmpeg() {
     // Only start if no existing process
     if (serverState.video.stream.process) {
         console.log('FFmpeg process already running');
-        return serverState.video.stream.process;
+        return;
     }
 
     const ffmpeg = spawn('ffmpeg', [
