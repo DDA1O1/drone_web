@@ -16,7 +16,7 @@ export const droneSlice = createSlice({
   reducers: {
     setDroneConnection: (state, action) => {
       state.droneConnected = action.payload;
-      if (!action.payload) {
+      if (!action.payload) { // if drone is not connected, reset retry attempts
         state.retryAttempts = 0;
       }
     },

@@ -14,11 +14,12 @@ import {
   incrementRetryAttempts,
   resetRetryAttempts
 } from '@/store/slices/droneSlice'
-import JSMpegVideoPlayer from '@/components/JSMpegVideoPlayer'
+import VideoContainer from '@/components/VideoContainer'
+import DroneControl from '@/components/control/DroneControl'
 
 function App() {
   // Refs for managing video player
-  const playerRef = useRef(null);
+  const videoRef = useRef(null);
   
   // Redux
   const dispatch = useDispatch();
@@ -33,16 +34,7 @@ function App() {
   } = useSelector(state => state.drone);
   
   // Constants
-  const MAX_SDK_RETRY_ATTEMPTS = 2;
-
-  // Error handling utility
-  const handleOperationError = (operation, error, additionalActions = null) => {
-    console.error(`Error during ${operation}:`, error);
-    dispatch(setError(`Failed to ${operation}: ${error.message}`));
-    if (additionalActions) {
-      additionalActions(error);
-    }
-  };
+  const MAX_SDK_RETRY_ATTEMPTS = 5;
 
   // ==== LIFE CYCLE MANAGEMENT ====
   const enterSDKMode = async () => {
@@ -61,34 +53,15 @@ function App() {
         dispatch(setError(null));
         dispatch(resetRetryAttempts());
       } else {
-        dispatch(setError(`Drone connection failed: ${data.response}`));
+        dispatch(setError(`Connection failed: ${data.response}`));
         dispatch(incrementRetryAttempts());
       }
       return success;
     } catch (error) {
-      handleOperationError('enter SDK mode', error, () => {
-        dispatch(incrementRetryAttempts());
-      });
+      console.error(error);
+      dispatch(setError(error.message));
+      dispatch(incrementRetryAttempts());
       return false;
-    }
-  };
-
-  /**
-   * Sends commands to the drone via HTTP API
-   */
-  const sendCommand = async (command) => {
-    try {
-      const response = await fetch(`/drone/${command}`);
-      if (!response.ok) {
-        throw new Error(`Command failed: ${response.statusText}`);
-      }
-      const data = await response.text();
-      console.log('Command response:', data);
-    } catch (error) {
-      handleOperationError(`send command: ${command}`, error, () => {
-        dispatch(setDroneConnection(false));
-        enterSDKMode();
-      });
     }
   };
 
@@ -102,7 +75,8 @@ function App() {
       if (!response.ok) throw new Error(`Failed to ${command}`);
       dispatch(setStreamEnabled(!streamEnabled));
     } catch (error) {
-      handleOperationError(`${command} video stream`, error);
+      console.error(error);
+      dispatch(setError(error.message));
     }
   };
 
@@ -121,13 +95,14 @@ function App() {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        throw new Error(`Failed to capture photo`);
       }
 
       const data = await response.json();
       console.log('Photo captured:', data.fileName);
     } catch (error) {
-      handleOperationError('capture photo', error);
+      console.error(error);
+      dispatch(setError(error.message));
     }
   };
 
@@ -151,90 +126,100 @@ function App() {
       }
       dispatch(setRecordingStatus(!isRecording));
     } catch (error) {
-      handleOperationError(isRecording ? 'stop recording' : 'start recording', error);
+      console.error(error);
+      dispatch(setError(error.message));
     }
   };
 
   return (
-    <div className="relative">
-      {/* Video player component - render first to be in background */}
-      <JSMpegVideoPlayer onError={(error) => dispatch(setError(error))} />
+    <div className="relative h-screen">
+      {/* Video container - renders as background */}
+      <VideoContainer ref={videoRef} />
       
-      {/* Controls overlay */}
-      <div className="relative z-10 container mx-auto px-4 py-8 max-w-4xl">
-        <h1 className="text-3xl font-bold text-center mb-8 text-white">Tello Drone Control</h1>
-        
-        {/* Connection status indicators */}
-        <div className="space-y-4 mb-8">
-          <div className={`p-4 rounded-lg flex items-center justify-between ${droneConnected ? 'bg-green-100' : 'bg-red-100'}`}>
-            <span className={`font-medium ${droneConnected ? 'text-green-700' : 'text-red-700'}`}>
+      {/* Drone controls overlay */}
+      <DroneControl />
+
+      {/* Connection status and media controls */}
+      <div className="absolute top-0 right-0 m-4 z-30">
+        <div className="space-y-4">
+          {/* Connection status */}
+          <div className={`p-4 rounded-lg ${droneConnected ? 'bg-green-500/70' : 'bg-red-500/70'}`}>
+            <span className="text-white font-medium">
               Drone: {droneConnected ? 'Connected' : 'Disconnected'}
             </span>
             {!droneConnected && (
               <button 
                 onClick={enterSDKMode}
-                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                className="ml-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
               >
-                Connect Drone
+                Connect
               </button>
             )}
           </div>
-          <div className={`p-4 rounded-lg flex items-center justify-between ${videoConnected ? 'bg-green-100' : 'bg-red-100'}`}>
-            <span className={`font-medium ${videoConnected ? 'text-green-700' : 'text-red-700'}`}>
+
+          {/* Video status */}
+          <div className={`p-4 rounded-lg ${videoConnected ? 'bg-green-500/70' : 'bg-red-500/70'}`}>
+            <span className="text-white font-medium">
               Video: {videoConnected ? 'Connected' : 'Disconnected'}
             </span>
             {droneConnected && (
               <button 
                 onClick={toggleVideoStream}
-                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                className="ml-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
               >
                 {streamEnabled ? 'Stop Video' : 'Start Video'}
               </button>
             )}
           </div>
-          {error && <div className="p-4 bg-red-100 text-red-700 rounded-lg">{error}</div>}
+
+          {/* Error display */}
+          {error && (
+            <div className="p-4 bg-red-500/70 text-white rounded-lg">
+              {error}
+            </div>
+          )}
+
+          {/* Media controls */}
+          <div className="grid grid-cols-2 gap-4">
+            <button 
+              onClick={capturePhoto}
+              disabled={!videoConnected}
+              className={`px-6 py-3 rounded-lg font-medium ${
+                videoConnected 
+                  ? 'bg-green-500/70 text-white hover:bg-green-600/70' 
+                  : 'bg-gray-500/70 text-gray-300 cursor-not-allowed'
+              } transition-colors`}
+            >
+              Capture Photo
+            </button>
+            <button 
+              onClick={toggleRecording}
+              disabled={!videoConnected}
+              className={`px-6 py-3 rounded-lg font-medium ${
+                videoConnected
+                  ? isRecording 
+                    ? 'bg-red-500/70 text-white hover:bg-red-600/70'
+                    : 'bg-blue-500/70 text-white hover:bg-blue-600/70'
+                  : 'bg-gray-500/70 text-gray-300 cursor-not-allowed'
+              } transition-colors`}
+            >
+              {isRecording ? 'Stop Recording' : 'Start Recording'}
+            </button>
+          </div>
         </div>
 
-        {/* Media controls */}
-        <div className="grid grid-cols-2 gap-4">
-          <button 
-            onClick={capturePhoto}
-            disabled={!videoConnected}
-            className={`px-6 py-3 rounded-lg font-medium ${
-              videoConnected 
-                ? 'bg-green-500 text-white hover:bg-green-600' 
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-            } transition-colors`}
-          >
-            Capture Photo
-          </button>
-          <button 
-            onClick={toggleRecording}
-            disabled={!videoConnected}
-            className={`px-6 py-3 rounded-lg font-medium ${
-              videoConnected
-                ? isRecording 
-                  ? 'bg-red-500 text-white hover:bg-red-600'
-                  : 'bg-blue-500 text-white hover:bg-blue-600'
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-            } transition-colors`}
-          >
-            {isRecording ? 'Stop Recording' : 'Start Recording'}
-          </button>
-        </div>
-        
         {/* Recording files list */}
         {recordingFiles && recordingFiles.length > 0 && (
           <div className="mt-8">
             <h2 className="text-xl font-semibold mb-4 text-white">Recording Files</h2>
             <ul className="space-y-2">
               {recordingFiles.map((file, index) => (
-                <li key={index} className="p-3 bg-gray-100 rounded flex items-center justify-between">
-                  <span className="text-gray-700">{file}</span>
+                <li key={index} className="p-3 bg-black/70 rounded flex items-center justify-between">
+                  <span className="text-white">{file}</span>
                   <a 
                     href={`/recordings/${file}`} 
                     download
-                    className="text-blue-500 hover:text-blue-600"
+                    className="text-blue-400 hover:text-blue-300"
                   >
                     Download
                   </a>

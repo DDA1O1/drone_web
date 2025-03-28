@@ -1422,3 +1422,180 @@ const heartbeat = setInterval(() => {
 - Multi-user support
 
 Choose the approach that best matches your deployment scenario and requirements. The local approach is optimized for drone control over WiFi, while the enterprise approach is better suited for cloud/production deployments.
+
+## Redux Integration: State Management Architecture
+
+### Overview
+
+Our drone control application uses Redux Toolkit for state management, providing a centralized store that eliminates prop drilling and ensures a single source of truth for application state.
+
+### Implementation Structure
+
+```text
+src/
+├── store/
+│   ├── store.js              # Redux store configuration
+│   └── slices/
+│       └── droneSlice.js     # Drone state management slice
+├── main.jsx                  # Redux Provider wrapper
+└── App.jsx                   # Main application component
+```
+
+### 1. Redux Store Setup
+
+The Redux store is configured in `store.js`:
+
+```javascript
+import { configureStore } from '@reduxjs/toolkit';
+import droneReducer from './slices/droneSlice';
+
+export const store = configureStore({
+  reducer: {
+    drone: droneReducer
+  }
+});
+```
+
+Key points:
+
+- Uses `configureStore` from Redux Toolkit for simplified store setup
+- Registers the `droneReducer` under the 'drone' key in the store
+- Automatically configures Redux DevTools and middleware
+
+### 2. Application Wrapper
+
+In `main.jsx`, we wrap the entire application with Redux's `Provider`:
+
+```javascript
+import { Provider } from 'react-redux'
+import store from '@/store/store'
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <Provider store={store}>
+      <App />
+    </Provider>
+  </React.StrictMode>
+)
+```
+
+This makes the Redux store available throughout the application.
+
+### 3. Drone State Slice
+
+The `droneSlice.js` manages all drone-related state:
+
+```javascript
+const initialState = {
+  droneConnected: false,
+  videoConnected: false,
+  streamEnabled: false,
+  isRecording: false,
+  recordingFiles: null,
+  error: null,
+  retryAttempts: 0
+};
+
+export const droneSlice = createSlice({
+  name: 'drone',
+  initialState,
+  reducers: {
+    setDroneConnection: (state, action) => {
+      state.droneConnected = action.payload;
+    },
+    setVideoConnection: (state, action) => {
+      state.videoConnected = action.payload;
+    },
+    // ... other reducers
+  }
+});
+```
+
+Features:
+
+- Centralizes all drone-related state
+- Provides immutable state updates through Redux Toolkit's Immer integration
+- Automatically generates action creators
+- Maintains a single source of truth for drone status
+
+### 4. Using Redux in Components
+
+Example from `App.jsx`:
+
+```javascript
+import { useDispatch, useSelector } from 'react-redux';
+
+function App() {
+  const dispatch = useDispatch();
+  const {
+    droneConnected,
+    videoConnected,
+    streamEnabled,
+    isRecording,
+    recordingFiles,
+    error,
+    retryAttempts
+  } = useSelector(state => state.drone);
+
+  // Use dispatch to update state
+  const enterSDKMode = async () => {
+    // ... logic ...
+    dispatch(setDroneConnection(true));
+  };
+}
+```
+
+Benefits:
+
+- Clean component code with `useSelector` and `useDispatch` hooks
+- No prop drilling required
+- Components can access state from anywhere
+- Predictable state updates through actions
+
+### State Management Benefits
+
+1. **Centralized State**
+   - All drone-related state in one location
+   - Easy to track state changes
+   - Simplified debugging
+   - Consistent state updates
+
+2. **Performance**
+   - Efficient re-renders
+   - Optimized state updates
+   - Automatic memoization
+   - DevTools integration
+
+3. **Maintainability**
+   - Clear state update patterns
+   - Reduced component coupling
+   - Easy to add new features
+   - Simplified testing
+
+4. **Developer Experience**
+   - Redux DevTools support
+   - Predictable state flow
+   - Easier debugging
+   - Clear action tracking
+
+### Redux Flow in Our Application
+
+```text
+Action Dispatch
+     ↓
+Redux Store (store.js)
+     ↓
+Drone Reducer (droneSlice.js)
+     ↓
+State Update
+     ↓
+Component Re-render
+```
+
+This architecture ensures:
+
+- Predictable state updates
+- Clear data flow
+- Easy debugging
+- Scalable state management
+- Efficient component updates

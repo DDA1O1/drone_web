@@ -2,8 +2,9 @@ import { useEffect, useRef } from 'react';
 import { useDispatch } from 'react-redux';
 import JSMpeg from '@cycjimmy/jsmpeg-player';
 import { setVideoConnection } from '@/store/slices/droneSlice';
+import VideoContainer from '@/components/VideoContainer';
 
-const JSMpegVideoPlayer = ({ onError }) => {
+const JSMpegVideoPlayer = ({ onError }) => { // onError is a callback function that is called when an error occurs onError={(error) => dispatch(setError(error))}
   const videoRef = useRef(null);
   const playerRef = useRef(null);
   const dispatch = useDispatch();
@@ -18,10 +19,10 @@ const JSMpegVideoPlayer = ({ onError }) => {
       }
       dispatch(setVideoConnection(false));
     };
-  }, [dispatch]);
+  }, []);
 
   const initializePlayer = () => {
-    if (!videoRef.current || playerRef.current) return;
+    if (playerRef.current) return;
     
     try {
       const url = `ws://${window.location.hostname}:3001`;
@@ -65,16 +66,7 @@ const JSMpegVideoPlayer = ({ onError }) => {
     }
   };
 
-  const getPlayer = () => playerRef.current;
-
-  return (
-    <div className="fixed inset-0 w-screen h-screen bg-black">
-      <div 
-        ref={videoRef} 
-        className="w-full h-full"
-      ></div>
-    </div>
-  );
+  return <VideoContainer ref={videoRef} />;
 };
 
 export default JSMpegVideoPlayer; 
