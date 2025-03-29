@@ -386,6 +386,7 @@ function initializeMP4Process() {
         ]);
 
         serverState.setVideoRecordingProcess(Mp4Process);
+        serverState.setVideoRecordingFilePath(mp4FilePath);
 
         Mp4Process.stderr.on('data', (data) => {
             const message = data.toString().trim();
@@ -400,6 +401,7 @@ function initializeMP4Process() {
             console.error('MP4 process error:', err.message);
             serverState.setVideoRecordingProcess(null);
             serverState.setVideoRecordingActive(false);
+            serverState.setVideoRecordingFilePath(null);
         });
 
         Mp4Process.on('exit', (code, signal) => {
@@ -409,12 +411,14 @@ function initializeMP4Process() {
             }
             serverState.setVideoRecordingProcess(null);
             serverState.setVideoRecordingActive(false);
+            serverState.setVideoRecordingFilePath(null);
         });
 
     } catch (error) {
         console.error('Failed to initialize MP4 process:', error.message);
         serverState.setVideoRecordingProcess(null);
         serverState.setVideoRecordingActive(false);
+        serverState.setVideoRecordingFilePath(null);
     }
 }
 
@@ -441,18 +445,25 @@ app.post('/start-recording', (req, res) => {
     }
 });
 
-app.post('/stop-recording', async (req, res) => {
+app.post('/stop-recording', (req, res) => {
     if (!serverState.getVideoRecordingActive()) {
         return res.status(400).json({ error: 'No active recording' });
     }
 
     try {
-        serverState.setVideoRecordingActive(false);
-        
+        // Get the whole file path
+        const filePath = serverState.getVideoRecordingFilePath();
+        // from file path extract the last name with basename
+        const fileName = filePath ? basename(filePath) : null;
+
         if (serverState.getVideoRecordingProcess()) {
             serverState.getVideoRecordingProcess().stdin.end();
             serverState.getVideoRecordingProcess().kill();
+            serverState.setVideoRecordingProcess(null);
         }
+
+        serverState.setVideoRecordingActive(false);
+        serverState.setVideoRecordingFilePath(null);
         
         res.json({ 
             status: 'ok', 
