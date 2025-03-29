@@ -184,6 +184,7 @@ app.get('/drone/:command', async (req, res) => {
                                 startFFmpeg();
                             }
                             serverState.setLastCommand(command);
+                            serverState.setVideoStreamActive(true);
                             res.json({ status: 'ok', response });
                         }
                     });
@@ -308,7 +309,7 @@ function startFFmpeg() {
         // Send to all connected WebSocket clients
         serverState.getConnectedClients().forEach((client) => {
             try {
-                client.send(chunk, { binary: true });
+                client.send(chunk, { binary: true }); // websocket can only transmit data in either string format or binary format
             } catch (err) {
                 console.error(`Failed to send to client: ${err}`);
                 serverState.removeClient(client);

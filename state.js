@@ -63,6 +63,10 @@ class ServerState {
         return this.video.stream.active;
     }
 
+    setVideoStreamActive(active) {
+        this.video.stream.active = active;
+    }
+
     // Video recording state methods
     setVideoRecordingProcess(process = null) {
         this.video.recording.process = process;
