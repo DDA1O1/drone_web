@@ -1,12 +1,16 @@
 import { useEffect, useRef } from 'react';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import JSMpeg from '@cycjimmy/jsmpeg-player';
-import { setVideoConnection } from '@/store/slices/droneSlice';
+import { setStreamEnabled } from '@/store/slices/droneSlice';
 import VideoContainer from '@/components/VideoContainer';
 
 const JSMpegVideoPlayer = ({ onError }) => { // onError is a callback function that is called when an error occurs onError={(error) => dispatch(setError(error))}
   const videoRef = useRef(null);
   const playerRef = useRef(null);
+  
+  const {
+    streamEnabled
+  } = useSelector(state => state.drone);
   const dispatch = useDispatch();
 
   useEffect(() => {
@@ -17,9 +21,21 @@ const JSMpegVideoPlayer = ({ onError }) => { // onError is a callback function t
         playerRef.current.destroy();
         playerRef.current = null;
       }
-      dispatch(setVideoConnection(false));
+      dispatch(setStreamEnabled(false));
     };
   }, []);
+
+  useEffect(() => {
+    if (!playerRef.current) return;
+    
+    if (streamEnabled) {
+      playerRef.current.play();
+      dispatch(setStreamEnabled(true));
+    } else {
+      playerRef.current.pause();
+      dispatch(setStreamEnabled(false));
+    }
+  }, [streamEnabled]);
 
   const initializePlayer = () => {
     if (playerRef.current) return;
@@ -31,7 +47,6 @@ const JSMpegVideoPlayer = ({ onError }) => { // onError is a callback function t
         videoHeight: 480,
         videoBufferSize: 512 * 1024,
         streaming: true,
-        autoplay: true,
         decodeFirstFrame: true,
         chunkSize: 4096,
         disableGl: false,
@@ -41,10 +56,10 @@ const JSMpegVideoPlayer = ({ onError }) => { // onError is a callback function t
         hooks: {
           play: () => {
             console.log('Video playback started');
-            dispatch(setVideoConnection(true));
+            dispatch(setStreamEnabled(true));
           },
-          pause: () => dispatch(setVideoConnection(false)),
-          stop: () => dispatch(setVideoConnection(false)),
+          pause: () => dispatch(setStreamEnabled(false)),
+          stop: () => dispatch(setStreamEnabled(false)),
           error: (error) => {
             console.error('JSMpeg error:', error);
             onError('Failed to connect to video stream: ' + error.message);

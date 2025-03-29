@@ -17,13 +17,11 @@ class ServerState {
             stream: {
                 active: false,
                 process: null,  // Main FFmpeg process for streaming
-                lastError: null
             },
             recording: {
                 active: false,
                 process: null,  // Separate FFmpeg process for MP4 recording
                 filePath: null,
-                lastError: null
             }
         };
 
@@ -65,10 +63,6 @@ class ServerState {
         return this.video.stream.active;
     }
 
-    setVideoStreamError(error) {
-        this.video.stream.lastError = error;
-    }
-
     // Video recording state methods
     setVideoRecordingProcess(process = null) {
         this.video.recording.process = process;
@@ -94,9 +88,6 @@ class ServerState {
         return this.video.recording.filePath;
     }
 
-    setVideoRecordingError(error) {
-        this.video.recording.lastError = error;
-    }
 
     // WebSocket client methods
     addClient(ws) {

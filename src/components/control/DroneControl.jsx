@@ -89,7 +89,7 @@ const DroneControl = () => {
   };
 
   const capturePhoto = async () => {
-    if (!videoConnected) {
+    if (!streamEnabled) {
       dispatch(setError('Video stream not available'));
       return;
     }

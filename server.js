@@ -171,7 +171,7 @@ app.get('/drone/:command', async (req, res) => {
             }
         } else if (command === 'streamon') {
             droneClient.send(command, 0, command.length, TELLO_PORT, TELLO_IP, (err) => {
-                if (err) {
+                if (err) { // if there is an error sending the command
                     return res.status(500).json({ error: err.message });
                 }
                 
@@ -184,7 +184,7 @@ app.get('/drone/:command', async (req, res) => {
                                 startFFmpeg();
                             }
                             serverState.setLastCommand(command);
-                            res.send('Command sent');
+                            res.json({ status: 'ok', response });
                         }
                     });
                 } catch (error) {
@@ -197,7 +197,7 @@ app.get('/drone/:command', async (req, res) => {
                     return res.status(500).json({ error: err.message });
                 }
                 serverState.setLastCommand(command);
-                res.send('Stream paused');
+                res.json({ status: 'ok', response: 'Stream paused' });
             });
         } else {
             // Send other commands normally
@@ -206,7 +206,7 @@ app.get('/drone/:command', async (req, res) => {
                     return res.status(500).json({ error: err.message });
                 }
                 serverState.setLastCommand(command);
-                res.send('Command sent');
+                res.json({ status: 'ok', response: 'Command sent' });
             });
         }
     } catch (error) {
@@ -272,7 +272,6 @@ function startFFmpeg() {
             if (!message.includes('already exists') && 
                 !message.includes('Overwrite?')) {
                 console.error('FFmpeg error:', message);
-                serverState.setVideoStreamError(message);
             }
         }
     });
@@ -280,7 +279,6 @@ function startFFmpeg() {
     // Handle process errors and exit
     ffmpeg.on('error', (error) => {
         console.error('FFmpeg process error:', error.message);
-        serverState.setVideoStreamError(error.message);
         if (serverState.getVideoStreamProcess() === ffmpeg) {
             serverState.setVideoStreamProcess(null);
             if (serverState.getLastCommand() === 'streamon') {
@@ -293,7 +291,6 @@ function startFFmpeg() {
     ffmpeg.on('exit', (code, signal) => {
         if (code !== 0) {
             console.error(`FFmpeg process exited with code ${code}, signal: ${signal}`);
-            serverState.setVideoStreamError(`Process exited with code ${code}, signal: ${signal}`);
         }
         if (serverState.getVideoStreamProcess() === ffmpeg) {
             serverState.setVideoStreamProcess(null);
