@@ -258,9 +258,9 @@ function startFFmpeg() {
         '-c:v', 'mjpeg',         // JPEG codec for stills
         '-q:v', '2',             // High quality for stills
         '-vf', 'fps=2',          // 2 frames per second is enough for stills
-        '-update', '1',          // Update the same file
+        '-update', '1',          // Update the same file and continuosly overwrite it instead of creating new files
         '-f', 'image2',          // Output format for stills
-        join(photosDir, 'current_frame.jpg')
+        join(photosDir, 'current_frame.jpg') // make the current frame always avilable in photosdirectory
     ]);
 
     serverState.setVideoStreamProcess(ffmpeg);
@@ -303,6 +303,7 @@ function startFFmpeg() {
     });
 
     // Stream video data directly to WebSocket clients
+    // Nodejs transmits this data into chunks with the on('data') event and its standard output stream API
     ffmpeg.stdout.on('data', (chunk) => {
         if (!serverState.isVideoStreamActive()) return;
 
@@ -318,13 +319,14 @@ function startFFmpeg() {
         
         // Send to MP4 recording if active
         if (serverState.getVideoRecordingActive() && 
-            serverState.getVideoRecordingProcess()?.stdin.writable) {
+            serverState.getVideoRecordingProcess()?.stdin.writable) { // check if the process is writable
             try {
-                serverState.getVideoRecordingProcess().stdin.write(chunk);
+                serverState.getVideoRecordingProcess().stdin.write(chunk); // write the chunk to the process
             } catch (error) {
                 console.error('Failed to write to MP4 stream:', error);
-                serverState.setVideoRecordingError(error.message);
-                serverState.getVideoRecordingProcess().stdin.end();
+                serverState.getVideoRecordingProcess().stdin.end(); // end the process
+
+                // Clean up the process
                 serverState.setVideoRecordingProcess(null);
                 serverState.setVideoRecordingActive(false);
                 serverState.setVideoRecordingFilePath(null);
@@ -390,13 +392,12 @@ function initializeMP4Process() {
             if (message.toLowerCase().includes('error') || 
                 message.toLowerCase().includes('failed')) {
                 console.error('MP4 FFmpeg:', message);
-                serverState.setVideoRecordingError(message);
             }
         });
 
+        // Handle process errors and exit
         Mp4Process.on('error', (err) => {
             console.error('MP4 process error:', err.message);
-            serverState.setVideoRecordingError(err.message);
             serverState.setVideoRecordingProcess(null);
             serverState.setVideoRecordingActive(false);
             serverState.setVideoRecordingFilePath(null);
@@ -406,7 +407,6 @@ function initializeMP4Process() {
             if (code !== 0) {
                 const error = `MP4 process exited with code ${code}, signal: ${signal}`;
                 console.error(error);
-                serverState.setVideoRecordingError(error);
             }
             serverState.setVideoRecordingProcess(null);
             serverState.setVideoRecordingActive(false);
@@ -415,7 +415,6 @@ function initializeMP4Process() {
 
     } catch (error) {
         console.error('Failed to initialize MP4 process:', error.message);
-        serverState.setVideoRecordingError(error.message);
         serverState.setVideoRecordingProcess(null);
         serverState.setVideoRecordingActive(false);
         serverState.setVideoRecordingFilePath(null);
