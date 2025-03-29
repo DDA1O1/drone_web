@@ -16,12 +16,14 @@ class ServerState {
         this.video = {
             stream: {
                 active: false,
-                process: null
+                process: null,  // Main FFmpeg process for streaming
+                lastError: null
             },
             recording: {
                 active: false,
-                process: null,
-                filePath: null
+                process: null,  // Separate FFmpeg process for MP4 recording
+                filePath: null,
+                lastError: null
             }
         };
 
@@ -49,12 +51,25 @@ class ServerState {
         this.drone.monitoringInterval = interval;
     }
 
-    // Video state methods
-    setVideoStreamState(active, process = null) {
-        this.video.stream.active = active;
+    // Video streaming state methods
+    setVideoStreamProcess(process = null) {
         this.video.stream.process = process;
+        this.video.stream.active = process !== null;
     }
 
+    getVideoStreamProcess() {
+        return this.video.stream.process;
+    }
+
+    isVideoStreamActive() {
+        return this.video.stream.active;
+    }
+
+    setVideoStreamError(error) {
+        this.video.stream.lastError = error;
+    }
+
+    // Video recording state methods
     setVideoRecordingProcess(process = null) {
         this.video.recording.process = process;
     }
@@ -65,6 +80,22 @@ class ServerState {
 
     setVideoRecordingFilePath(filePath) {
         this.video.recording.filePath = filePath;
+    }
+
+    getVideoRecordingProcess() {
+        return this.video.recording.process;
+    }
+
+    getVideoRecordingActive() {
+        return this.video.recording.active;
+    }
+
+    getVideoRecordingFilePath() {
+        return this.video.recording.filePath;
+    }
+
+    setVideoRecordingError(error) {
+        this.video.recording.lastError = error;
     }
 
     // WebSocket client methods
@@ -96,31 +127,26 @@ class ServerState {
         return this.drone.lastCommand;
     }
 
-    getVideoRecordingProcess() {
-        return this.video.recording.process;
-    }
-
-    getVideoRecordingActive() {
-        return this.video.recording.active;
-    }
-
-    getVideoRecordingFilePath() {
-        return this.video.recording.filePath;
-    }
-
     // Cleanup method
     cleanup() {
         if (this.drone.monitoringInterval) {
             clearInterval(this.drone.monitoringInterval);
         }
         
+        // Clean up streaming FFmpeg process
         if (this.video.stream.process) {
             this.video.stream.process.kill();
+            this.video.stream.process = null;
+            this.video.stream.active = false;
         }
         
+        // Clean up recording FFmpeg process
         if (this.video.recording.process) {
             this.video.recording.process.stdin.end();
             this.video.recording.process.kill();
+            this.video.recording.process = null;
+            this.video.recording.active = false;
+            this.video.recording.filePath = null;
         }
 
         this.websocket.clients.forEach(client => {
