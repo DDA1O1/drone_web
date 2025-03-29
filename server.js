@@ -371,7 +371,7 @@ function initializeMP4Process() {
 
     const timestamp = Date.now();
     const mp4FileName = `video_${timestamp}.mp4`;
-    serverState.setVideoRecordingFilePath(join(mp4Dir, mp4FileName));
+    const mp4FilePath = join(mp4Dir, mp4FileName);
     
     try {
         const Mp4Process = spawn('ffmpeg', [
@@ -382,7 +382,7 @@ function initializeMP4Process() {
             '-crf', '23',             // Balance quality/size
             '-movflags', '+faststart', // Enable streaming
             '-y',                      // Overwrite output
-            serverState.getVideoRecordingFilePath()
+            mp4FilePath
         ]);
 
         serverState.setVideoRecordingProcess(Mp4Process);
@@ -400,7 +400,6 @@ function initializeMP4Process() {
             console.error('MP4 process error:', err.message);
             serverState.setVideoRecordingProcess(null);
             serverState.setVideoRecordingActive(false);
-            serverState.setVideoRecordingFilePath(null);
         });
 
         Mp4Process.on('exit', (code, signal) => {
@@ -410,14 +409,12 @@ function initializeMP4Process() {
             }
             serverState.setVideoRecordingProcess(null);
             serverState.setVideoRecordingActive(false);
-            serverState.setVideoRecordingFilePath(null);
         });
 
     } catch (error) {
         console.error('Failed to initialize MP4 process:', error.message);
         serverState.setVideoRecordingProcess(null);
         serverState.setVideoRecordingActive(false);
-        serverState.setVideoRecordingFilePath(null);
     }
 }
 
@@ -437,7 +434,7 @@ app.post('/start-recording', (req, res) => {
         }
 
         serverState.setVideoRecordingActive(true);
-        res.json({ mp4FileName: basename(serverState.getVideoRecordingFilePath()) });
+        res.json({ status: 'ok', message: 'Recording started successfully' });
         
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -454,34 +451,15 @@ app.post('/stop-recording', async (req, res) => {
         
         if (serverState.getVideoRecordingProcess()) {
             serverState.getVideoRecordingProcess().stdin.end();
-            
-            await new Promise((resolve, reject) => {
-                const timeout = setTimeout(() => {
-                    serverState.getVideoRecordingProcess().kill('SIGKILL');
-                    reject(new Error('MP4 process termination timeout'));
-                }, 5000);
-
-                serverState.getVideoRecordingProcess().once('exit', (code, signal) => {
-                    clearTimeout(timeout);
-                    if (code === 0 || signal === 'SIGKILL') {
-                        resolve();
-                    } else {
-                        reject(new Error(`MP4 process exited with code ${code}, signal: ${signal}`));
-                    }
-                });
-            }).catch(error => {
-                console.warn('MP4 process cleanup warning:', error.message);
-                serverState.setVideoRecordingError(error.message);
-            });
-
-            serverState.setVideoRecordingProcess(null);
-            serverState.setVideoRecordingFilePath(null);
-            console.log('MP4 recording stopped and cleaned up');
+            serverState.getVideoRecordingProcess().kill();
         }
         
-        res.send('Recording stopped');
+        res.json({ 
+            status: 'ok', 
+            message: 'Recording stopped',
+            fileName: fileName
+        });
     } catch (error) {
-        serverState.setVideoRecordingError(error.message);
         res.status(500).json({ error: error.message });
     }
 });

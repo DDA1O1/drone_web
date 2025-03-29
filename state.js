@@ -21,7 +21,6 @@ class ServerState {
             recording: {
                 active: false,
                 process: null,  // Separate FFmpeg process for MP4 recording
-                filePath: null,
             }
         };
 
@@ -76,20 +75,12 @@ class ServerState {
         this.video.recording.active = active;
     }
 
-    setVideoRecordingFilePath(filePath) {
-        this.video.recording.filePath = filePath;
-    }
-
     getVideoRecordingProcess() {
         return this.video.recording.process;
     }
 
     getVideoRecordingActive() {
         return this.video.recording.active;
-    }
-
-    getVideoRecordingFilePath() {
-        return this.video.recording.filePath;
     }
 
 
