@@ -506,6 +506,9 @@ const gracefulShutdown = async () => {
 };
 
 // Handle different termination signals
+// SIGINT: Interrupt from keyboard
+// SIGTERM: Termination signal from OS
+// SIGQUIT: Quit signal from keyboard
 ['SIGINT', 'SIGTERM', 'SIGQUIT'].forEach(signal => {
     process.on(signal, gracefulShutdown);
 });
@@ -518,12 +521,13 @@ const startServers = () => {
     app.listen(port, () => {
         console.log(`Express server running on http://localhost:${port}`);
         
+        // if the websocket server is not open, wait for it to open and then log that both servers are running
         if (wss.readyState !== wss.OPEN) {
             wss.once('listening', () => {
-                console.log('Both servers are running');
+                console.log('Both servers Express and WebSocket are running');
             });
         } else {
-            console.log('Both servers are running');
+            console.log('Both servers Express and WebSocket are running');
         }
     });
 };
