@@ -6,7 +6,13 @@ const initialState = {
   isRecording: false,
   recordingFiles: null,
   error: null,
-  retryAttempts: 0
+  retryAttempts: 0,
+  droneState: {
+    battery: null,
+    speed: null,
+    time: null,
+    lastUpdate: null
+  }
 };
 
 export const droneSlice = createSlice({
@@ -36,6 +42,9 @@ export const droneSlice = createSlice({
     },
     resetRetryAttempts: (state) => {
       state.retryAttempts = 0;
+    },
+    setDroneState: (state, action) => {
+      state.droneState = action.payload;
     }
   }
 });
@@ -47,7 +56,8 @@ export const {
   setRecordingFiles,
   setError,
   incrementRetryAttempts,
-  resetRetryAttempts
+  resetRetryAttempts,
+  setDroneState
 } = droneSlice.actions;
 
 export default droneSlice.reducer; 
