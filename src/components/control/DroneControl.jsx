@@ -20,6 +20,9 @@ const DroneControl = () => {
     error,
     retryAttempts 
   } = useSelector(state => state.drone);
+
+  // ==== ACTIVE KEYS ====
+  {/* its temporary state to track which keys are currently being held down and does not need persistence */}  
   const [activeKeys, setActiveKeys] = useState(new Set());
 
   // Constants
@@ -190,7 +193,7 @@ const DroneControl = () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [droneConnected]);
+  }, [droneConnected]); // re-runs when droneConnected changes to prevent memory leaks
 
   // Basic flight controls
   const handleTakeoff = () => sendCommand('takeoff');
