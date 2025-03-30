@@ -120,7 +120,7 @@ const DroneControl = () => {
         throw new Error(`Failed to ${isRecording ? 'stop' : 'start'} recording`);
       }
       
-      if (!isRecording) { 
+      if (isRecording) { 
         const files = await response.json();
         dispatch(setRecordingFiles(files));
       } else {
@@ -288,16 +288,18 @@ const DroneControl = () => {
           <span className="text-sm font-medium text-white">Capture</span>
         </button>
 
-        {/* Record Button */}
+        {/* Record Button
+        // First check: Controls button functionality
+        // If no stream is active (streamEnabled = false), button cannot be clicked */}
         <button 
           onClick={toggleRecording}
           disabled={!streamEnabled}
           className={`group relative px-3 py-1.5 rounded-full flex items-center gap-2 ${
             streamEnabled
               ? isRecording 
-                ? 'bg-red-500/20 hover:bg-red-500/30 border border-red-500/50' 
-                : 'bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/50'
-              : 'bg-gray-500/20 border border-gray-500/30 cursor-not-allowed'
+                ? 'bg-red-500/20 hover:bg-red-500/30 border border-red-500/50' // Red when recording
+                : 'bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/50' // Blue when ready to record
+              : 'bg-gray-500/20 border border-gray-500/30 cursor-not-allowed' // Gray when disabled (no stream)
           } backdrop-blur-sm transition-all duration-200`}
         >
           <svg 
