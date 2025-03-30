@@ -50,9 +50,8 @@ class ServerState {
     }
 
     // Video streaming state methods
-    setVideoStreamProcess(process = null) {
+    setVideoStreamProcess(process) {
         this.video.stream.process = process;
-        this.video.stream.active = process !== null;
     }
 
     getVideoStreamProcess() {

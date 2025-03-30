@@ -3,14 +3,14 @@
  * This component handles the video streaming and control interface for the Tello drone.
  */
 
-import VideoContainer from '@/components/VideoContainer'
+import JSMpegVideoPlayer from '@/components/JSMpegVideoPlayer'
 import DroneControl from '@/components/control/DroneControl'
 
 function App() {
   return (
     <div className="relative h-screen">
-      {/* Video container - renders as background */}
-      <VideoContainer />
+      {/* JSMpegVideoPlayer - renders the video stream */}
+      <JSMpegVideoPlayer />
       
       {/* Drone controls overlay */}
       <DroneControl />

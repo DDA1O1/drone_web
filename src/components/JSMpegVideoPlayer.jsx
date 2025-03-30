@@ -5,43 +5,53 @@ import { setStreamEnabled, setError } from '@/store/slices/droneSlice';
 import VideoContainer from '@/components/VideoContainer';
 
 const JSMpegVideoPlayer = () => {
+  // Refs to manage video element, player instance, and initialization state
   const videoRef = useRef(null);
-  const playerRef = useRef(null); // for storing reference to the JSMpeg player instance
+  const playerRef = useRef(null);
+  const isInitializedRef = useRef(false);
   
   const {
     streamEnabled
   } = useSelector(state => state.drone);
   const dispatch = useDispatch();
 
+  // Cleanup effect: Destroy player and reset state on unmount
   useEffect(() => {
-    initializePlayer();
-
     return () => {
       if (playerRef.current) {
         playerRef.current.destroy();
         playerRef.current = null;
       }
       dispatch(setStreamEnabled(false));
+      isInitializedRef.current = false;
     };
   }, []);
 
+  // Handle video stream state changes
   useEffect(() => {
-    if (!playerRef.current) return;
+    // Initialize player on first stream enable
+    if (!playerRef.current) {
+      if (streamEnabled && !isInitializedRef.current) {
+        initializePlayer();
+      }
+      return;
+    }
     
+    // Use player's built-in methods for subsequent play/pause
     if (streamEnabled) {
       playerRef.current.play();
-      dispatch(setStreamEnabled(true));
     } else {
       playerRef.current.pause();
-      dispatch(setStreamEnabled(false));
     }
   }, [streamEnabled]);
 
+  // Initialize JSMpeg video player with WebSocket stream
   const initializePlayer = () => {
-    if (playerRef.current) return;
+    if (playerRef.current || !streamEnabled) return;
     
     try {
       const url = `ws://${window.location.hostname}:3001`;
+      // Create new JSMpeg player instance with configuration
       const player = new JSMpeg.VideoElement(videoRef.current, url, {
         videoWidth: 640,
         videoHeight: 480,
@@ -53,6 +63,7 @@ const JSMpegVideoPlayer = () => {
         progressive: true,
         throttled: false,
         
+        // Event hooks for player state management
         hooks: {
           play: () => {
             console.log('Video playback started');
@@ -67,8 +78,11 @@ const JSMpegVideoPlayer = () => {
         }
       });
       
+      // Store player reference and mark as initialized
       playerRef.current = player.player;
+      isInitializedRef.current = true;
 
+      // Add WebSocket error handler
       if (playerRef.current?.source?.socket) {
         playerRef.current.source.socket.addEventListener('error', (error) => {
           console.error('WebSocket error:', error);
@@ -77,6 +91,7 @@ const JSMpegVideoPlayer = () => {
       }
 
     } catch (err) {
+      console.error('Failed to initialize video:', err);
       dispatch(setError('Failed to initialize video: ' + err.message));
     }
   };

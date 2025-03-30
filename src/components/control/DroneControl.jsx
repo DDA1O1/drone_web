@@ -233,7 +233,7 @@ const DroneControl = () => {
         {/* Video status and control - right side */}
         <div className="ml-8 flex items-center gap-2">
           <div className={`h-2 w-2 rounded-full ${streamEnabled ? 'bg-sky-500' : 'bg-red-500'} animate-pulse`} />
-          {droneConnected || (
+          {droneConnected && (
             <button 
               onClick={toggleVideoStream}
               className="px-3 py-1.5 bg-white/10 backdrop-blur-sm text-white text-sm font-medium rounded-full 
