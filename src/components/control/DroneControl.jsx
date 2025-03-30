@@ -473,10 +473,21 @@ const DroneControl = () => {
         </button>
       </div>
 
+      {/* Add ESC key indicator with conditional rendering */}
+      {droneConnected && (
+        <div className="absolute top-28 left-8 z-30">
+          <div className="flex items-center gap-2 bg-transparent px-3 py-2 rounded-lg
+                        transition-all duration-300 ease-in-out opacity-40 hover:opacity-80">
+            <kbd className={`px-2 py-1 text-xs font-semibold text-gray-800 bg-white/80 rounded-md shadow-sm 
+                          ${activeKeys.has('Escape') ? 'bg-red-100/80' : ''}`}>ESC</kbd>
+            <span className="text-white/60 text-sm">to quit</span>
+          </div>
+        </div>
+      )}
+
       {/* Left corner - WASD Movement Controls */}
       <div className="absolute bottom-8 left-8 z-30">
-        <div className="bg-black bg-opacity-70 p-6 rounded-lg text-white">
-          <h3 className="text-center font-bold mb-4">Movement</h3>
+        <div className="bg-transparent bg-opacity-70 p-6 rounded-lg text-white">
           
           {/* WASD keys */}
           <div className="grid grid-cols-3 gap-2 w-40 mx-auto">
@@ -497,8 +508,7 @@ const DroneControl = () => {
       
       {/* Right corner - Arrow keys for Altitude & Rotation */}
       <div className="absolute bottom-8 right-8 z-30">
-        <div className="bg-black bg-opacity-70 p-6 rounded-lg text-white">
-          <h3 className="text-center font-bold mb-4">Altitude & Rotation</h3>
+        <div className="bg-transparent bg-opacity-70 p-6 rounded-lg text-white">
           
           {/* Arrow keys */}
           <div className="grid grid-cols-3 gap-2 w-40 mx-auto">
@@ -520,18 +530,6 @@ const DroneControl = () => {
       {/* Connection status and media controls */}
       <div className="absolute top-0 right-0 m-4 z-30">
         <div className="space-y-4">
-          {/* Add ESC key indicator with conditional rendering */}
-          {droneConnected || (
-            <div className="fixed top-1/2 right-8 transform -translate-y-1/2 z-40">
-              <div className="flex items-center gap-2 bg-black/40 backdrop-blur-sm px-3 py-2 rounded-lg border border-white/10
-                            transition-all duration-300 ease-in-out opacity-80 hover:opacity-100">
-                <kbd className={`px-2.5 py-1.5 text-xs font-semibold text-gray-800 bg-gray-100 rounded-md shadow-sm 
-                              ${activeKeys.has('Escape') ? 'bg-red-200' : ''}`}>ESC</kbd>
-                <span className="text-white/70 text-sm">to quit</span>
-              </div>
-            </div>
-          )}
-
           {/* Error display - bottom center */}
           {error && (
             <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50">
