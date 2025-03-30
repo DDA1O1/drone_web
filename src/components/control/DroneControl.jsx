@@ -200,6 +200,15 @@ const DroneControl = () => {
   const handleLand = () => sendCommand('land');
   const handleEmergency = () => sendCommand('emergency');
 
+  // Clear error after 5 seconds
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => {
+        dispatch(setError(null));
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error, dispatch]);
 
   return (
     <>
@@ -490,10 +499,15 @@ const DroneControl = () => {
       {/* Connection status and media controls */}
       <div className="absolute top-0 right-0 m-4 z-30">
         <div className="space-y-4">
-          {/* Error display */}
+          {/* Error display - bottom center */}
           {error && (
-            <div className="p-4 bg-red-500/70 text-white rounded-lg">
-              {error}
+            <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50">
+              <div className="p-4 bg-red-500/70 text-white rounded-lg shadow-lg backdrop-blur-sm
+                            transition-all duration-300 ease-out
+                            translate-y-0 opacity-100 scale-100
+                            motion-safe:animate-bounce">
+                {error}
+              </div>
             </div>
           )}
         </div>
