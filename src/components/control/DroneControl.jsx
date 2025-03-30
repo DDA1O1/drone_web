@@ -121,7 +121,7 @@ const DroneControl = () => {
         throw new Error(`Failed to ${isRecording ? 'stop' : 'start'} recording`);
       }
       
-      if (!isRecording) {
+      if (!isRecording) { 
         const files = await response.json();
         dispatch(setRecordingFiles(files));
       } else {

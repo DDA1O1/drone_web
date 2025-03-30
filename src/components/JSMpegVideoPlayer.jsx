@@ -1,12 +1,12 @@
 import { useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import JSMpeg from '@cycjimmy/jsmpeg-player';
-import { setStreamEnabled } from '@/store/slices/droneSlice';
+import { setStreamEnabled, setError } from '@/store/slices/droneSlice';
 import VideoContainer from '@/components/VideoContainer';
 
-const JSMpegVideoPlayer = ({ onError }) => { // onError is a callback function that is called when an error occurs onError={(error) => dispatch(setError(error))}
+const JSMpegVideoPlayer = () => {
   const videoRef = useRef(null);
-  const playerRef = useRef(null);
+  const playerRef = useRef(null); // for storing reference to the JSMpeg player instance
   
   const {
     streamEnabled
@@ -62,22 +62,22 @@ const JSMpegVideoPlayer = ({ onError }) => { // onError is a callback function t
           stop: () => dispatch(setStreamEnabled(false)),
           error: (error) => {
             console.error('JSMpeg error:', error);
-            onError('Failed to connect to video stream: ' + error.message);
+            dispatch(setError('Failed to connect to video stream: ' + error.message));
           }
         }
       });
       
       playerRef.current = player.player;
 
-      if (player?.player?.source?.socket) {
-        player.player.source.socket.addEventListener('error', (error) => {
+      if (playerRef.current?.source?.socket) {
+        playerRef.current.source.socket.addEventListener('error', (error) => {
           console.error('WebSocket error:', error);
-          onError('WebSocket connection error: ' + error.message);
+          dispatch(setError('WebSocket connection error: ' + error.message));
         });
       }
 
     } catch (err) {
-      onError('Failed to initialize video: ' + err.message);
+      dispatch(setError('Failed to initialize video: ' + err.message));
     }
   };
 
