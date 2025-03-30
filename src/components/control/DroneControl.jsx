@@ -14,7 +14,6 @@ const DroneControl = () => {
   const dispatch = useDispatch();
   const { 
     droneConnected,
-    videoConnected,
     streamEnabled,
     isRecording,
     recordingFiles,
@@ -218,7 +217,7 @@ const DroneControl = () => {
 
         {/* Video status and control - right side */}
         <div className="ml-8 flex items-center gap-2">
-          <div className={`h-2 w-2 rounded-full ${videoConnected ? 'bg-sky-500' : 'bg-red-500'} animate-pulse`} />
+          <div className={`h-2 w-2 rounded-full ${streamEnabled ? 'bg-sky-500' : 'bg-red-500'} animate-pulse`} />
           {droneConnected || (
             <button 
               onClick={toggleVideoStream}
@@ -259,16 +258,16 @@ const DroneControl = () => {
         {/* Capture Photo Button */}
         <button 
           onClick={capturePhoto}
-          disabled={!videoConnected}
+          disabled={!streamEnabled}
           className={`group relative px-3 py-1.5 rounded-full flex items-center gap-2 ${
-            videoConnected 
+            streamEnabled 
               ? 'bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/50' 
               : 'bg-gray-500/20 border border-gray-500/30 cursor-not-allowed'
           } backdrop-blur-sm transition-all duration-200`}
         >
           <svg 
             xmlns="http://www.w3.org/2000/svg" 
-            className={`h-4 w-4 ${videoConnected ? 'text-emerald-400' : 'text-gray-400'}`}
+            className={`h-4 w-4 ${streamEnabled ? 'text-emerald-400' : 'text-gray-400'}`}
             fill="none" 
             viewBox="0 0 24 24" 
             stroke="currentColor"
@@ -292,9 +291,9 @@ const DroneControl = () => {
         {/* Record Button */}
         <button 
           onClick={toggleRecording}
-          disabled={!videoConnected}
+          disabled={!streamEnabled}
           className={`group relative px-3 py-1.5 rounded-full flex items-center gap-2 ${
-            videoConnected
+            streamEnabled
               ? isRecording 
                 ? 'bg-red-500/20 hover:bg-red-500/30 border border-red-500/50' 
                 : 'bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/50'
@@ -304,7 +303,7 @@ const DroneControl = () => {
           <svg 
             xmlns="http://www.w3.org/2000/svg" 
             className={`h-4 w-4 ${
-              videoConnected 
+              streamEnabled 
                 ? isRecording ? 'text-red-400' : 'text-sky-400'
                 : 'text-gray-400'
             }`}

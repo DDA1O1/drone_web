@@ -2,7 +2,6 @@ import { createSlice } from '@reduxjs/toolkit';
 
 const initialState = {
   droneConnected: false,
-  videoConnected: false,
   streamEnabled: false,
   isRecording: false,
   recordingFiles: null,
@@ -19,9 +18,6 @@ export const droneSlice = createSlice({
       if (!action.payload) { // if drone is not connected, reset retry attempts
         state.retryAttempts = 0;
       }
-    },
-    setVideoConnection: (state, action) => {
-      state.videoConnected = action.payload;
     },
     setStreamEnabled: (state, action) => {
       state.streamEnabled = action.payload;
@@ -46,7 +42,6 @@ export const droneSlice = createSlice({
 
 export const {
   setDroneConnection,
-  setVideoConnection,
   setStreamEnabled,
   setRecordingStatus,
   setRecordingFiles,
