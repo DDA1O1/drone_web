@@ -221,6 +221,20 @@ app.get('/drone/:command', async (req, res) => {
     }
 });
 
+// Add shutdown endpoint
+app.post('/drone/shutdown', async (req, res) => {
+    try {
+        console.log('Shutdown requested via ESC key');
+        // Send response before initiating shutdown
+        res.json({ status: 'ok', message: 'Shutdown initiated' });
+        // Initiate graceful shutdown
+        await gracefulShutdown();
+    } catch (error) {
+        console.error('Shutdown error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Start FFmpeg process for video streaming
 function startFFmpeg() {
     console.log('Starting FFmpeg process...');

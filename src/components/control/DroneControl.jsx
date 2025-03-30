@@ -139,7 +139,7 @@ const DroneControl = () => {
   // ==== KEYBOARD CONTROLS ====
   useEffect(() => {
     const handleKeyDown = (e) => {
-      const validKeys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 'a', 's', 'd', 'q', 'e'];
+      const validKeys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 'a', 's', 'd', 'q', 'e', 'Escape'];
       if (validKeys.includes(e.key)) {
       {/*  // Stops the browser's default behavior for these keys
         // Prevents things like page scrolling when using arrow keys
@@ -170,12 +170,13 @@ const DroneControl = () => {
           case 'ArrowDown': sendCommand(`down ${20}`); break;
           case 'ArrowLeft': sendCommand(`ccw ${45}`); break;
           case 'ArrowRight': sendCommand(`cw ${45}`); break;
+          case 'Escape': handleGracefulShutdown(); break;
         }
       }
     };
     // ==== KEY UP ====
     const handleKeyUp = (e) => {
-      const validKeys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 'a', 's', 'd', 'q', 'e'];
+      const validKeys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 'a', 's', 'd', 'q', 'e', 'Escape'];
       if (validKeys.includes(e.key)) {
         e.preventDefault();
         setActiveKeys(prev => {
@@ -209,6 +210,26 @@ const DroneControl = () => {
       return () => clearTimeout(timer);
     }
   }, [error, dispatch]);
+
+  // Add graceful shutdown handler
+  const handleGracefulShutdown = async () => {
+    try {
+      const response = await fetch('/drone/shutdown', {
+        method: 'POST'
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to initiate graceful shutdown');
+      }
+      
+      dispatch(setDroneConnection(false));
+      dispatch(setStreamEnabled(false));
+      dispatch(setError('Graceful shutdown initiated'));
+    } catch (error) {
+      console.error(error);
+      dispatch(setError(error.message));
+    }
+  };
 
   return (
     <>
@@ -499,6 +520,18 @@ const DroneControl = () => {
       {/* Connection status and media controls */}
       <div className="absolute top-0 right-0 m-4 z-30">
         <div className="space-y-4">
+          {/* Add ESC key indicator with conditional rendering */}
+          {droneConnected || (
+            <div className="fixed top-1/2 right-8 transform -translate-y-1/2 z-40">
+              <div className="flex items-center gap-2 bg-black/40 backdrop-blur-sm px-3 py-2 rounded-lg border border-white/10
+                            transition-all duration-300 ease-in-out opacity-80 hover:opacity-100">
+                <kbd className={`px-2.5 py-1.5 text-xs font-semibold text-gray-800 bg-gray-100 rounded-md shadow-sm 
+                              ${activeKeys.has('Escape') ? 'bg-red-200' : ''}`}>ESC</kbd>
+                <span className="text-white/70 text-sm">to quit</span>
+              </div>
+            </div>
+          )}
+
           {/* Error display - bottom center */}
           {error && (
             <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50">
