@@ -42,11 +42,12 @@ const DroneControl = () => {
         dispatch(setDroneConnection(true));
         dispatch(setError(null));
         dispatch(resetRetryAttempts());
-      } else {
-        dispatch(setError(`Connection failed: ${data.response}`));
-        dispatch(incrementRetryAttempts());
+        return true;
       }
-      return success;
+      
+      // If not successful, throw an error to be handled by catch block
+      throw new Error(`Connection failed: ${data.response}`);
+      
     } catch (error) {
       console.error(error);
       dispatch(setError(error.message));
@@ -67,8 +68,8 @@ const DroneControl = () => {
       if (!response.ok) {
         throw new Error(`Command failed: ${response.statusText}`);
       }
-      const data = await response.text();
-      console.log('Command response:', data);
+      const data = await response.json();
+      console.log('Command response:', data.response);
     } catch (error) {
       console.error(error);
       dispatch(setError(error.message));

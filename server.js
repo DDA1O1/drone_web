@@ -197,8 +197,11 @@ app.get('/drone/:command', async (req, res) => {
                 if (err) {
                     return res.status(500).json({ error: err.message });
                 }
-                serverState.setLastCommand(command);
-                res.json({ status: 'ok', response: 'Stream paused' });
+                droneClient.once('message', (msg) => {
+                    const response = msg.toString().trim();
+                    serverState.setLastCommand(command);
+                    res.json({ status: 'ok', response });
+                });
             });
         } else {
             // Send other commands normally
@@ -206,8 +209,11 @@ app.get('/drone/:command', async (req, res) => {
                 if (err) {
                     return res.status(500).json({ error: err.message });
                 }
-                serverState.setLastCommand(command);
-                res.json({ status: 'ok', response: 'Command sent' });
+                droneClient.once('message', (msg) => {
+                    const response = msg.toString().trim();
+                    serverState.setLastCommand(command);
+                    res.json({ status: 'ok', response });
+                });
             });
         }
     } catch (error) {
