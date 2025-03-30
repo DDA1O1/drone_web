@@ -138,9 +138,21 @@ const DroneControl = () => {
     const handleKeyDown = (e) => {
       const validKeys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 'a', 's', 'd', 'q', 'e'];
       if (validKeys.includes(e.key)) {
+      {/*  // Stops the browser's default behavior for these keys
+        // Prevents things like page scrolling when using arrow keys
+        // Ensures keys only control the drone */}
         e.preventDefault();
+      {/* A Set only stores unique values
+        //  If a key is already pressed, adding it again won't create duplicates
+        // Perfect for tracking which keys are currently being held down
+        // Used to show visual feedback in the UI (the keys light up when pressed) */}  
         setActiveKeys(prev => {
-          const updated = new Set(prev);
+        {/* Why We Always Need Previous State:
+        // Even for a single key, we need the previous state because:
+        // Multiple keys can be pressed before others are released
+        // Keys can be pressed simultaneously
+        // We don't want to lose track of already pressed keys    */}  
+          const updated = new Set(prev); 
           updated.add(e.key);
           return updated;
         });
@@ -158,21 +170,21 @@ const DroneControl = () => {
         }
       }
     };
-
+    // ==== KEY UP ====
     const handleKeyUp = (e) => {
       const validKeys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 'a', 's', 'd', 'q', 'e'];
       if (validKeys.includes(e.key)) {
         e.preventDefault();
         setActiveKeys(prev => {
           const updated = new Set(prev);
-          updated.delete(e.key);
+          updated.delete(e.key); // removes the key from the set that was released
           return updated;
         });
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('keydown', handleKeyDown); // when a key is pressed, handleKeyDown is called
+    window.addEventListener('keyup', handleKeyUp); // when a key is released, handleKeyUp is called
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
