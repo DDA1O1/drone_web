@@ -66,7 +66,7 @@ const DroneControl = () => {
     try {
       const response = await fetch(`/drone/${command}`);
       if (!response.ok) {
-        throw new Error(`Command failed: ${response.statusText}`);
+        throw new Error(`Command failed: ${response}`);
       }
       const data = await response.json();
       console.log('Command response:', data.response);
@@ -81,7 +81,7 @@ const DroneControl = () => {
     const command = streamEnabled ? 'streamoff' : 'streamon';
     try {
       const response = await fetch(`/drone/${command}`);
-      if (!response.ok) throw new Error(`Failed to ${command}`);
+      if (!response.ok) throw new Error(`Failed to ${command}, ${response}`);
       dispatch(setStreamEnabled(!streamEnabled));
     } catch (error) {
       console.error(error);
