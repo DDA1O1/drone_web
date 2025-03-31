@@ -21,8 +21,16 @@ export function useDroneStateEventSource() {
 
         // Handle connection errors
         eventSource.onerror = (error) => {
-            console.error('EventSource error:', error);
-            eventSource.close();
+            // Log the error but don't close the connection
+            // EventSource will automatically attempt to reconnect
+            console.error('EventSource error - attempting automatic reconnection:', error);
+            
+            // Log the connection state
+            console.log('EventSource readyState:', 
+                eventSource.readyState === 0 ? 'CONNECTING' :
+                eventSource.readyState === 1 ? 'OPEN' :
+                eventSource.readyState === 2 ? 'CLOSED' : 'UNKNOWN'
+            );
         };
 
         // Cleanup on unmount
