@@ -542,27 +542,6 @@ const DroneControl = () => {
             </div>
           )}
         </div>
-
-        {/* Recording files list */}
-        {recordingFiles && recordingFiles.length > 0 && (
-          <div className="mt-8">
-            <h2 className="text-xl font-semibold mb-4 text-white">Recording Files</h2>
-            <ul className="space-y-2">
-              {recordingFiles.map((file, index) => (
-                <li key={index} className="p-3 bg-black/70 rounded flex items-center justify-between">
-                  <span className="text-white">{file}</span>
-                  <a 
-                    href={`/recordings/${file}`} 
-                    download
-                    className="text-blue-400 hover:text-blue-300"
-                  >
-                    Download
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
       </div>
     </>
   );

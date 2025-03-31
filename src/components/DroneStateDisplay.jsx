@@ -13,7 +13,7 @@ const DroneStateDisplay = () => {
     <div className="flex items-center justify-center w-full min-h-[200px]">
       <div className="absolute top-5.5 left-50 z-30">
         {/* Battery Status */}
-        <div className="bg-transparent backdrop-blur-sm rounded-lg p-2 bg-green-500/10 border border-green-500/30 hover:bg-green-500/10 transition-all duration-200 group">
+        <div className="bg-transparent backdrop-blur-sm rounded-lg p-2 bg-green-500/10 hover:bg-green-500/10 transition-all duration-200 group">
           <div className="flex items-center gap-1">
             <svg 
               xmlns="http://www.w3.org/2000/svg" 
@@ -45,26 +45,24 @@ const DroneStateDisplay = () => {
 
       {/* Speed Status */}
       <div className="absolute top-5.5 left-80 z-30">
-        <div className="bg-transparent backdrop-blur-sm rounded-lg p-2 bg-green-500/10 border border-green-500/30 hover:bg-green-500/10 transition-all duration-200 group">
+        <div className="bg-transparent backdrop-blur-sm rounded-lg p-2 bg-green-500/10 hover:bg-green-500/10 transition-all duration-200 group">
           <div className="flex items-center gap-1">
-            <div className="flex items-center">
-              <svg 
-                xmlns="http://www.w3.org/2000/svg" 
-                className="h-5 w-15 text-sky-400/90" 
-                fill="none" 
-                viewBox="0 0 24 24" 
-                stroke="currentColor"
-              >
-                <path 
-                  strokeLinecap="round" 
-                  strokeLinejoin="round" 
-                  strokeWidth={2} 
-                  d="M13 5l7 7-7 7M5 5l7 7-7 7"
-                />
-              </svg>
-            </div>
-            <div className="text-center">
-              <span className="text-base font-mono text-sky-400/90">
+            <svg 
+              xmlns="http://www.w3.org/2000/svg" 
+              className="h-5 w-15 text-sky-400/90" 
+              fill="none" 
+              viewBox="0 0 24 24" 
+              stroke="currentColor"
+            >
+              <path 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                strokeWidth={2} 
+                d="M13 5l7 7-7 7M5 5l7 7-7 7"
+              />
+            </svg>
+            <div className="text-center bg-black/20 rounded-md px-2 py-1 w-full group-hover:bg-black/30 transition-all duration-200">
+              <span className="text-sm font-mono font-semibold text-sky-400/90">
                 {droneState.speed ? `${droneState.speed} cm/s` : ''}
               </span>
             </div>
@@ -73,8 +71,8 @@ const DroneStateDisplay = () => {
       </div>
 
       {/* Flight Time */}
-      <div className="absolute top-5.5 right-80 z-30">
-        <div className="bg-transparent backdrop-blur-sm rounded-lg p-2 bg-purple-500/10 border border-purple-500/30 hover:bg-purple-500/10 transition-all duration-200 group">
+      <div className="absolute top-20 right-10 z-30">
+        <div className="bg-transparent backdrop-blur-sm rounded-lg p-2 bg-purple-500/10 hover:bg-purple-500/10 transition-all duration-200 group">
           <div className="flex items-center gap-1">
             <svg 
               xmlns="http://www.w3.org/2000/svg" 
@@ -100,8 +98,8 @@ const DroneStateDisplay = () => {
       </div>
 
       {/* Last Update */}
-      <div className="absolute top-20 right-10 z-30">
-        <div className="bg-transparent backdrop-blur-sm rounded-lg p-2 bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/10 transition-all duration-200 group">
+      <div className="absolute top-30 right-10 z-30">
+        <div className="bg-transparent backdrop-blur-sm rounded-lg p-2 bg-amber-500/10 hover:bg-amber-500/10 transition-all duration-200 group">
           <div className="flex items-center gap-1">
             <svg 
               xmlns="http://www.w3.org/2000/svg" 
