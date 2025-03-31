@@ -1,42 +1,130 @@
 import React from 'react';
 import { useSelector } from 'react-redux';
-import useDroneStateWebSocket from '../hooks/useDroneStateWebSocket';
+import { useDroneStateEventSource } from '@hooks/useDroneStateEventSource';
 
 const DroneStateDisplay = () => {
-  // Initialize WebSocket connection
-  useDroneStateWebSocket();
+  // Initialize EventSource connection
+  useDroneStateEventSource();
 
   // Get drone state from Redux store
   const droneState = useSelector((state) => state.drone.droneState);
-  const isConnected = useSelector((state) => state.drone.droneConnected);
-
-  if (!isConnected) {
-    return <div className="bg-gray-800/50 backdrop-blur-sm rounded-lg p-4 m-4">Drone not connected</div>;
-  }
 
   return (
-    <div className="bg-gray-800/50 backdrop-blur-sm rounded-lg p-4 m-4">
-      <h3 className="text-lg font-semibold mb-4">Drone State</h3>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="flex justify-between items-center bg-gray-700/50 p-3 rounded-md">
-          <label className="text-gray-300">Battery:</label>
-          <span className="text-white font-mono">{droneState.battery ? `${droneState.battery}%` : 'N/A'}</span>
+    <div className="flex items-center justify-center w-full min-h-[200px]">
+      <div className="absolute top-5.5 left-50 z-30">
+        {/* Battery Status */}
+        <div className="bg-transparent backdrop-blur-sm rounded-lg p-2 bg-green-500/10 border border-green-500/30 hover:bg-green-500/10 transition-all duration-200 group">
+          <div className="flex items-center gap-1">
+            <svg 
+              xmlns="http://www.w3.org/2000/svg" 
+              className="h-5 w-15 text-green-400/90" 
+              fill="none" 
+              viewBox="0 0 24 24" 
+              stroke="currentColor"
+            >
+              <path 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                strokeWidth={2} 
+                d="M3 7h14a2 2 0 012 2v6a2 2 0 01-2 2H3a2 2 0 01-2-2V9a2 2 0 012-2zm14 1h2v6h-2V8z"
+              />
+            </svg>
+            <div className="text-center bg-black/20 rounded-md px-2 py-1 w-full group-hover:bg-black/30 transition-all duration-200">
+              <span className={`text-sm font-mono font-semibold ${
+                !droneState.battery ? 'text-gray-500' :
+                droneState.battery < 20 ? 'text-red-400/90' : 
+                droneState.battery < 50 ? 'text-yellow-400/90' : 
+                'text-green-400/90'
+              }`}>
+                {droneState.battery ? `${droneState.battery}%` : ''}
+              </span>
+            </div>
+          </div>
         </div>
-        <div className="flex justify-between items-center bg-gray-700/50 p-3 rounded-md">
-          <label className="text-gray-300">Speed:</label>
-          <span className="text-white font-mono">{droneState.speed ? `${droneState.speed} cm/s` : 'N/A'}</span>
+      </div>
+
+      {/* Speed Status */}
+      <div className="absolute top-5.5 left-80 z-30">
+        <div className="bg-transparent backdrop-blur-sm rounded-lg p-2 bg-green-500/10 border border-green-500/30 hover:bg-green-500/10 transition-all duration-200 group">
+          <div className="flex items-center gap-1">
+            <div className="flex items-center">
+              <svg 
+                xmlns="http://www.w3.org/2000/svg" 
+                className="h-5 w-15 text-sky-400/90" 
+                fill="none" 
+                viewBox="0 0 24 24" 
+                stroke="currentColor"
+              >
+                <path 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round" 
+                  strokeWidth={2} 
+                  d="M13 5l7 7-7 7M5 5l7 7-7 7"
+                />
+              </svg>
+            </div>
+            <div className="text-center">
+              <span className="text-base font-mono text-sky-400/90">
+                {droneState.speed ? `${droneState.speed} cm/s` : ''}
+              </span>
+            </div>
+          </div>
         </div>
-        <div className="flex justify-between items-center bg-gray-700/50 p-3 rounded-md">
-          <label className="text-gray-300">Flight Time:</label>
-          <span className="text-white font-mono">{droneState.time ? `${droneState.time}s` : 'N/A'}</span>
+      </div>
+
+      {/* Flight Time */}
+      <div className="absolute top-5.5 right-80 z-30">
+        <div className="bg-transparent backdrop-blur-sm rounded-lg p-2 bg-purple-500/10 border border-purple-500/30 hover:bg-purple-500/10 transition-all duration-200 group">
+          <div className="flex items-center gap-1">
+            <svg 
+              xmlns="http://www.w3.org/2000/svg" 
+              className="h-5 w-15 text-purple-400/90" 
+              fill="none" 
+              viewBox="0 0 24 24" 
+              stroke="currentColor"
+            >
+              <path 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                strokeWidth={2} 
+                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+            <div className="text-center bg-black/20 rounded-md px-2 py-1 w-full group-hover:bg-black/30 transition-all duration-200">
+              <span className="text-sm font-mono font-semibold text-purple-400/90">
+                {droneState.time ? `${droneState.time}s` : ''}
+              </span>
+            </div>
+          </div>
         </div>
-        <div className="flex justify-between items-center bg-gray-700/50 p-3 rounded-md">
-          <label className="text-gray-300">Last Update:</label>
-          <span className="text-white font-mono">
-            {droneState.lastUpdate
-              ? new Date(droneState.lastUpdate).toLocaleTimeString()
-              : 'N/A'}
-          </span>
+      </div>
+
+      {/* Last Update */}
+      <div className="absolute top-20 right-10 z-30">
+        <div className="bg-transparent backdrop-blur-sm rounded-lg p-2 bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/10 transition-all duration-200 group">
+          <div className="flex items-center gap-1">
+            <svg 
+              xmlns="http://www.w3.org/2000/svg" 
+              className="h-5 w-15 text-amber-400/90" 
+              fill="none" 
+              viewBox="0 0 24 24" 
+              stroke="currentColor"
+            >
+              <path 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                strokeWidth={2} 
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+              />
+            </svg>
+            <div className="text-center bg-black/20 rounded-md px-2 py-1 w-full group-hover:bg-black/30 transition-all duration-200">
+              <span className="text-sm font-mono font-semibold text-amber-400/90">
+                {droneState.lastUpdate
+                  ? new Date(droneState.lastUpdate).toLocaleTimeString()
+                  : ''}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
