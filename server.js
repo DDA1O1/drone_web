@@ -105,7 +105,6 @@ function startDroneMonitoring() {
     
     const interval = setInterval(() => {
         droneClient.send('battery?', 0, 8, TELLO_PORT, TELLO_IP);
-        droneClient.send('speed?', 0, 6, TELLO_PORT, TELLO_IP);
         droneClient.send('time?', 0, 5, TELLO_PORT, TELLO_IP);
     }, 10000);
 
