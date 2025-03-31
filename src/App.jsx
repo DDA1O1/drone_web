@@ -13,11 +13,11 @@ function App() {
       {/* JSMpegVideoPlayer - renders the video stream */}
       <JSMpegVideoPlayer />
       
-      {/* Drone state display */}
-      <DroneStateDisplay />
-      
       {/* Drone controls overlay */}
       <DroneControl />
+
+      {/* Drone state display */}
+      <DroneStateDisplay />
     </div>
   );
 }

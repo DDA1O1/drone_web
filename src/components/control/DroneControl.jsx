@@ -381,15 +381,15 @@ const DroneControl = () => {
       </div>
 
       {/* Takeoff/Land Controls - Top Left */}
-      <div className="absolute top-8 left-8 z-30 flex gap-3">
+      <div className="absolute top-5 left-8 z-30 flex gap-3">
         {/* Takeoff button */}
         <button
           onClick={handleTakeoff}
           disabled={!droneConnected}
           className={`group relative p-2.5 rounded-lg ${
             droneConnected 
-              ? 'bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/50' 
-              : 'bg-gray-500/20 border border-gray-500/30 cursor-not-allowed'
+              ? 'bg-transparent hover:bg-emerald-500/30 border border-emerald-500/50' 
+              : 'bg-transparent border border-gray-500/30 cursor-not-allowed'
           } backdrop-blur-sm transition-all duration-200 hover:scale-105`}
           title="Takeoff"
         >
@@ -418,8 +418,8 @@ const DroneControl = () => {
           disabled={!droneConnected}
           className={`group relative p-2.5 rounded-lg ${
             droneConnected 
-              ? 'bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/50' 
-              : 'bg-gray-500/20 border border-gray-500/30 cursor-not-allowed'
+              ? 'bg-transparent hover:bg-sky-500/30 border border-sky-500/50' 
+              : 'bg-transparent border border-gray-500/30 cursor-not-allowed'
           } backdrop-blur-sm transition-all duration-200 hover:scale-105`}
           title="Land"
         >
@@ -448,8 +448,8 @@ const DroneControl = () => {
           disabled={!droneConnected}
           className={`group relative p-2.5 rounded-lg ${
             droneConnected 
-              ? 'bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 animate-pulse' 
-              : 'bg-gray-500/20 border border-gray-500/30 cursor-not-allowed'
+              ? 'bg-transparent hover:bg-red-500/30 border border-red-500/50 animate-pulse' 
+              : 'bg-transparent border border-gray-500/30 cursor-not-allowed'
           } backdrop-blur-sm transition-all duration-200 hover:scale-105`}
           title="Emergency Stop"
         >
