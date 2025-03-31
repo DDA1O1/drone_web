@@ -119,6 +119,37 @@ function stopDroneMonitoring() {
     }
 }
 
+// Add SSE endpoint for drone state updates
+app.get('/drone-state-stream', (req, res) => { // Each client gets their own 'res' object
+    // Set headers for SSE
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    // Then flush them immediately to establish the SSE connection
+    res.flushHeaders();
+
+    // Send initial state whoever is connected to the SSE endpoint will receive the initial state
+    const initialState = serverState.getDroneState();
+    res.write(`data: ${JSON.stringify(initialState)}\n\n`); // The double newline (\n\n) is crucial - it marks the end of an SSE message
+
+    // This function is created in the scope where it has access to THIS CLIENT'S 'res' object
+    const sendUpdate = (state) => {
+        if (!res.writableEnded) {
+            res.write(`data: ${JSON.stringify(state)}\n\n`);
+        }
+    };
+
+    // Store the client's send function
+    const clientId = Date.now();
+    serverState.addSSEClient(clientId, sendUpdate);
+
+    // Remove client when connection closes
+    req.on('close', () => {
+        serverState.removeSSEClient(clientId);
+    });
+});
+
 // Update the message handler to store state
 droneClient.on('message', (msg) => {
     try {
@@ -133,16 +164,9 @@ droneClient.on('message', (msg) => {
             serverState.updateDroneState('time', response);
         }
         
-        // Broadcast to all connected clients since WebSocket can only transmit data in either string format or binary format
-        const update = JSON.stringify({
-            type: 'droneState',
-            value: serverState.getDroneState(),
-            timestamp: Date.now()
-        });
-        
-        serverState.getConnectedClients().forEach(client => {
-            client.send(update);
-        });
+        // Send update to all SSE clients
+        const state = serverState.getDroneState();
+        serverState.broadcastSSEUpdate(state);
         
         console.log('Drone response:', response);
     } catch (error) {

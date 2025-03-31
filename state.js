@@ -26,9 +26,11 @@ class ServerState {
         };
 
         this.websocket = {
-            clients: new Set(), // unique clients
+            clients: new Set(), // unique clients for video streaming
             nextClientId: 1
         };
+
+        this.sseClients = new Map(); // Map of SSE client IDs to their send functions (key value pair)
     }
 
     // Drone state methods
@@ -91,6 +93,26 @@ class ServerState {
         return this.video.recording.filePath;
     }
 
+    // SSE client methods
+    addSSEClient(clientId, sendFunction) {
+        this.sseClients.set(clientId, sendFunction);
+    }
+
+    removeSSEClient(clientId) {
+        this.sseClients.delete(clientId);
+    }
+
+    broadcastSSEUpdate(state) {
+        this.sseClients.forEach(sendFunction => {
+            try {
+                // Each sendFunction already knows which 'res' to use
+                // because it was created with access to that specific client's 'res'
+                sendFunction(state);
+            } catch (error) {
+                console.error('Error sending SSE update:', error);
+            }
+        });
+    }
 
     // WebSocket client methods
     addClient(ws) {
@@ -143,13 +165,17 @@ class ServerState {
             this.video.recording.filePath = null;
         }
 
+        // Clean up WebSocket clients (for video)
         this.websocket.clients.forEach(client => {
             try {
                 client.close();
             } catch (err) {
-                console.error('Error closing client:', err);
+                console.error('Error closing WebSocket client:', err);
             }
         });
+
+        // Clean up SSE clients
+        this.sseClients.clear();
     }
 }
 
