@@ -2,35 +2,32 @@ import { useEffect } from 'react';
 import { useDispatch } from 'react-redux';
 import { setDroneState } from '@/store/slices/droneSlice';
 
-export function useDroneStateWebSocket() {
+export function useDroneStateEventSource() {
     const dispatch = useDispatch();
 
     useEffect(() => {
-        // Create WebSocket connection
-        const ws = new WebSocket(`ws://${window.location.hostname}:3001/state`);
+        // Create EventSource connection
+        const eventSource = new EventSource(`http://${window.location.hostname}:3000/drone-state-stream`);
 
         // Handle incoming messages
-        ws.onmessage = (event) => {
+        eventSource.onmessage = (event) => {
             try {
-                const data = JSON.parse(event.data);
-                if (data.type === 'droneState') {
-                    dispatch(setDroneState(data.value));
-                }
+                const state = JSON.parse(event.data);
+                dispatch(setDroneState(state));
             } catch (error) {
                 console.error('Error processing drone state:', error);
             }
         };
 
         // Handle connection errors
-        ws.onerror = (error) => {
-            console.error('WebSocket error:', error);
+        eventSource.onerror = (error) => {
+            console.error('EventSource error:', error);
+            eventSource.close();
         };
 
         // Cleanup on unmount
         return () => {
-            if (ws.readyState === WebSocket.OPEN) {
-                ws.close();
-            }
+            eventSource.close();
         };
     }, []); // Empty dependency array since we only want to create the connection once
 } 
