@@ -268,9 +268,9 @@ function startFFmpeg() {
         return;
     }
 
-    const ffmpegArgs = [
+    const ffmpeg = spawn('ffmpeg', [
         '-hide_banner',           // Hide FFmpeg compilation info
-        '-loglevel', 'info',     // Only show errors in logs
+        '-loglevel', 'error',     // Only show errors in logs
         '-y',                     // Force overwrite output files
 
         // Input configuration
@@ -304,54 +304,50 @@ function startFFmpeg() {
         '-update', '1',          // Update the same file and continuosly overwrite it instead of creating new files
         '-f', 'image2',          // Output format for stills
         join(photosDir, 'current_frame.jpg') // make the current frame always avilable in photosdirectory
-    ];
+    ]);
 
-       // Log the command being run
-    console.log(`Spawning FFmpeg with command: ffmpeg ${ffmpegArgs.join(' ')}`);
-
-
-    const ffmpeg = spawn('ffmpeg', ffmpegArgs);
     serverState.setVideoStreamProcess(ffmpeg);
 
     // Enhanced error logging
     ffmpeg.stderr.on('data', (data) => {
-        const message = data.toString();
-        console.error(`FFmpeg STDERR: ${message}`);
+        const message = data.toString().trim();
+        if (message && !message.includes('Last message repeated')) {
+            // Filter out common non-error messages
+            if (!message.includes('already exists') && 
+                !message.includes('Overwrite?')) {
+                console.error('FFmpeg error:', message);
+            }
+        }
     });
 
     // Handle process errors and exit
     ffmpeg.on('error', (error) => {
-        console.error('FFmpeg process emitted error event:', error.message);
+        console.error('FFmpeg process error:', error.message);
         if (serverState.getVideoStreamProcess() === ffmpeg) {
             serverState.setVideoStreamProcess(null);
-            // if (serverState.getLastCommand() === 'streamon') {
-            //     console.log('Attempting FFmpeg restart...');
-            //     setTimeout(startFFmpeg, 1000);
-            // }
+            if (serverState.getLastCommand() === 'streamon') {
+                console.log('Attempting FFmpeg restart...');
+                setTimeout(startFFmpeg, 1000);
+            }
         }
     });
 
     ffmpeg.on('exit', (code, signal) => {
-        console.log(`FFmpeg process exited with code ${code} and signal ${signal}`); // Log code and signal
+        if (code !== 0) {
+            console.error(`FFmpeg process exited with code ${code}, signal: ${signal}`);
+        }
         if (serverState.getVideoStreamProcess() === ffmpeg) {
             serverState.setVideoStreamProcess(null);
-             // Optionally attempt restart (be cautious of loops)
-            // if (code !== 0 && serverState.getLastCommand() === 'streamon') {
-            //     console.log('FFmpeg process exited unexpectedly, attempting restart...');
-            //     setTimeout(startFFmpeg, 1000);
-            // }
+            if (serverState.getLastCommand() === 'streamon') {
+                console.log('FFmpeg process exited, attempting restart...');
+                setTimeout(startFFmpeg, 1000);
+            }
         }
     });
 
     // Stream video data directly to WebSocket clients
     // Nodejs transmits this data into chunks with the on('data') event and its standard output stream API
-    let dataReceived = false;
     ffmpeg.stdout.on('data', (chunk) => {
-
-        if (!dataReceived) {
-            console.log("FFmpeg STDOUT: First data chunk received.");
-            dataReceived = true;
-        }
         if (!serverState.isVideoStreamActive()) return;
 
         // Send to all connected WebSocket clients
@@ -379,13 +375,6 @@ function startFFmpeg() {
                 serverState.setVideoRecordingFilePath(null);
             }
         }
-    });
-
-    // Log if stdout closes without data
-    ffmpeg.stdout.on('close', () => {
-         if (!dataReceived) {
-             console.warn("FFmpeg STDOUT: Stream closed without ever receiving data.");
-         }
     });
 
     return ffmpeg;
