@@ -1,10 +1,12 @@
-name: Docker Publish CI
+name: Docker Publish CI for v1 Tags
 
 # Controls when the workflow will run
 on:
   push:
-    branches: [ "main" ] # Trigger on pushes to the main branch
-    tags: [ "v*.*.*" ]   # Trigger on version tags like v1.0.0, v1.2.3 etc.
+    tags:
+      - 'v1.*.*' # Trigger ONLY on version tags starting with v1.
+                 # Examples: v1.0.0, v1.2.3, v1.15.0 will trigger
+                 # Examples: v2.0.0, main branch pushes, other tags will NOT trigger
   workflow_dispatch: {} # Allows manual triggering from the Actions tab
 
 jobs:
@@ -12,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest # Use a standard Linux runner
     permissions:
       contents: read      # Allow reading repo contents
-      packages: write     # Needed for pushing to registries (like GHCR, but good practice)
+      packages: write     # Needed for pushing to registries
 
     steps:
       # 1. Checkout the repository code
@@ -32,12 +34,13 @@ jobs:
           # Replace 'your-dockerhub-username/tello-drone-control' with your actual Docker Hub image name
           images: ${{ secrets.DOCKERHUB_USERNAME }}/tello-drone-control
           tags: |
-            # tag 'latest' for default branch pushes (e.g., main)
-            type=raw,value=latest,enable={{is_default_branch}}
-            # tag with the git version tag if triggered by a tag (e.g., v1.2.0 -> 1.2.0)
+            # tag with the git version tag (e.g., v1.2.0 -> 1.2.0)
             type=ref,event=tag
             # tag with the short git commit SHA - useful for linking builds to code
             type=sha,prefix=,suffix=,format=short
+            # --- We removed the 'latest' tag generation ---
+            # If you WANT the latest v1.*.* tag push to ALSO be tagged 'latest', uncomment the next line:
+            # type=raw,value=latest
 
       # 4. Log in to Docker Hub using the secrets
       - name: Log in to Docker Hub
