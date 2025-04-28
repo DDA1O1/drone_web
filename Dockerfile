@@ -45,20 +45,14 @@ RUN mkdir -p uploads/photos uploads/mp4_recordings && \
 VOLUME /app/uploads
 
 # Expose the ports the application uses
-EXPOSE 3000 # Express API and SSE
-EXPOSE 3001 # WebSocket Video Stream
+# Express API and SSE
+EXPOSE 3000
+# WebSocket Video Stream
+EXPOSE 3001
 # Note: UDP ports for drone communication (8889, 11111) are outbound from the container
 # and typically don't need EXPOSE unless something external needs to connect *to* them within the container.
 
 # Set the command to run the application using the start script
-# 'npm run start' should execute 'npm run build && npm run server' or similar
-# Since we already built, we could just run 'npm run server', but 'start' is standard.
-# Let's stick to 'npm run start' assuming it correctly runs the server after the build (which is already done).
-# However, the provided start script includes 'npm run build'.
-# We can optimize by directly running the server:
-# CMD ["node", "server.js"]
-# Or modify the package.json start script if preferred.
-# Let's use the direct node command for clarity here:
 CMD ["node", "server.js"]
 
 # Optional: Add a non-root user for security
